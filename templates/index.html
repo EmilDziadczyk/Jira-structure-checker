@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Jira Project Overview</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            margin: 2rem;
+            background-color: #f5f5f5;
+        }
+        h1, h2, h3 {
+            margin-bottom: 0.5rem;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+        th, td {
+            padding: 0.4rem 0.5rem;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            border-bottom: 2px solid #ddd;
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            padding-right: 1.5rem;
+        }
+        th:hover {
+            background-color: #f0f0f0;
+        }
+        th.sortable::after {
+            content: " ↕";
+            position: absolute;
+            right: 0.3rem;
+            color: #999;
+            font-size: 0.8em;
+        }
+        th.sort-asc::after {
+            content: " ▲";
+            color: #333;
+        }
+        th.sort-desc::after {
+            content: " ▼";
+            color: #333;
+        }
+        tbody tr:nth-child(odd) {
+            background-color: #fafafa;
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 999px;
+            background: #e0e7ff;
+            font-size: 0.8rem;
+        }
+        .total {
+            font-weight: 600;
+            margin-top: 0.25rem;
+        }
+        .subtitle {
+            color: #555;
+            margin-top: 0;
+            margin-bottom: 1rem;
+        }
+        .type-table-wrapper {
+            margin-top: 1rem;
+        }
+        .columns {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        .column {
+            flex: 1;
+            min-width: 30%;
+            background: #fafafa;
+            border-radius: 10px;
+            padding: 0.75rem;
+            border: 1px solid #e5e5e5;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .column h3 {
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+        }
+        /* Wider ID column and prevent wrapping */
+        .column table th:first-child,
+        .column table td:first-child {
+            width: 150px;
+            white-space: nowrap;
+        }
+        /* Created date formatting */
+        .created-date {
+            color: #666;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+        /* Modal styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 900px;
+            max-height: 80vh;
+            width: 90%;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #eee;
+        }
+        .modal-header h2 {
+            margin: 0;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #666;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+        }
+        .modal-close:hover {
+            background: #f0f0f0;
+            color: #000;
+        }
+        .modal-content {
+            overflow-y: auto;
+            flex: 1;
+        }
+        .modal-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .modal-table th {
+            position: sticky;
+            top: 0;
+            background: white;
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 2px solid #ddd;
+            font-weight: 600;
+            z-index: 10;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            padding-right: 1.5rem;
+        }
+        .modal-table th:hover {
+            background-color: #f0f0f0;
+        }
+        .modal-table th.sortable::after {
+            content: " ↕";
+            position: absolute;
+            right: 0.3rem;
+            color: #999;
+            font-size: 0.8em;
+        }
+        .modal-table th.sort-asc::after {
+            content: " ▲";
+            color: #333;
+        }
+        .modal-table th.sort-desc::after {
+            content: " ▼";
+            color: #333;
+        }
+        .modal-filter {
+            width: 100%;
+            padding: 0.4rem;
+            margin-bottom: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        .modal-filter:focus {
+            outline: none;
+            border-color: #0065ff;
+            box-shadow: 0 0 0 2px rgba(0, 101, 255, 0.1);
+        }
+        .filter-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+        .modal-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid #eee;
+        }
+        .modal-table tbody tr:hover {
+            background-color: #f5f5f5;
+        }
+        .modal-table .issue-id {
+            font-weight: 600;
+            color: #0065ff;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .modal-table .issue-id:hover {
+            color: #0052cc;
+        }
+        .unlinked-count.clickable {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .unlinked-count.clickable:hover {
+            color: #b91c1c !important;
+        }
+        .issue-type-clickable {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .issue-type-clickable:hover {
+            background-color: #e0e7ff;
+            padding: 0.1rem 0.3rem;
+            border-radius: 4px;
+        }
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>Jira project summary</h1>
+    <p class="subtitle">
+        Project: <strong>{{ project_name }}</strong>
+    </p>
+    <p class="total">Total issues in current data set: {{ total_issues }}</p>
+
+    <div class="type-table-wrapper">
+        <h2>Issues by type</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Issue type</th>
+                <th>Total count</th>
+                <th>Unlinked</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for issue_type, total_count, unlinked_count, expected_parent in type_counts %}
+                <tr>
+                    <td>
+                        <span class="badge issue-type-clickable" 
+                              style="cursor: pointer; text-decoration: underline;"
+                              data-issue-type="{{ issue_type }}">
+                            {{ issue_type }}
+                        </span>
+                    </td>
+                    <td>{{ total_count }}</td>
+                    <td>
+                        {% if expected_parent %}
+                            {% if unlinked_count > 0 %}
+                                <span class="unlinked-count clickable" 
+                                      style="color: #dc2626; font-weight: 600;" 
+                                      data-issue-type="{{ issue_type }}"
+                                      data-expected-parent="{{ expected_parent }}">
+                                    {{ unlinked_count }}
+                                </span>
+                                <span style="color: #666; font-size: 0.85em;">(not linked to {{ expected_parent }})</span>
+                            {% else %}
+                                <span style="color: #16a34a;">✓ All linked</span>
+                            {% endif %}
+                        {% else %}
+                            <span style="color: #999;">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="columns">
+
+        <!-- EPICS -->
+        <div class="column">
+            <h3>Epics ({{ epics|length }})</h3>
+            <p style="font-size: 0.85em; color: #666; margin-top: 0;">Unlinked only</p>
+            <table class="sortable-table" data-table-id="epics">
+                <thead>
+                <tr>
+                    <th class="sortable" data-sort="id">ID</th>
+                    <th class="sortable" data-sort="summary">Summary</th>
+                    <th class="sortable" data-sort="created">Created</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for key, summary, created in epics %}
+                    <tr>
+                        <td data-sort-value="{{ key }}">{{ key }}</td>
+                        <td data-sort-value="{{ summary|lower }}">{{ summary }}</td>
+                        <td data-sort-value="{{ created }}"><span class="created-date">{{ created }}</span></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- STORIES -->
+        <div class="column">
+            <h3>Stories ({{ stories|length }})</h3>
+            <p style="font-size: 0.85em; color: #666; margin-top: 0;">Unlinked only</p>
+            <table class="sortable-table" data-table-id="stories">
+                <thead>
+                <tr>
+                    <th class="sortable" data-sort="id">ID</th>
+                    <th class="sortable" data-sort="summary">Summary</th>
+                    <th class="sortable" data-sort="created">Created</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for key, summary, created in stories %}
+                    <tr>
+                        <td data-sort-value="{{ key }}">{{ key }}</td>
+                        <td data-sort-value="{{ summary|lower }}">{{ summary }}</td>
+                        <td data-sort-value="{{ created }}"><span class="created-date">{{ created }}</span></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- TASKS -->
+        <div class="column">
+            <h3>Tasks ({{ tasks|length }})</h3>
+            <p style="font-size: 0.85em; color: #666; margin-top: 0;">Unlinked only</p>
+            <table class="sortable-table" data-table-id="tasks">
+                <thead>
+                <tr>
+                    <th class="sortable" data-sort="id">ID</th>
+                    <th class="sortable" data-sort="summary">Summary</th>
+                    <th class="sortable" data-sort="created">Created</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for key, summary, created in tasks %}
+                    <tr>
+                        <td data-sort-value="{{ key }}">{{ key }}</td>
+                        <td data-sort-value="{{ summary|lower }}">{{ summary }}</td>
+                        <td data-sort-value="{{ created }}"><span class="created-date">{{ created }}</span></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</div>
+
+<!-- Modal for unlinked issues -->
+<div class="modal-overlay" id="unlinkedModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 id="modalTitle">Unlinked Issues</h2>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-content" id="modalContent">
+            <div class="loading">Loading...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+const JIRA_URL = {% if jira_url %}{{ jira_url|tojson }}{% else %}null{% endif %};
+(function() {
+    // Funkcja sortowania tabeli
+    function sortTable(table, columnIndex, ascending) {
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        
+        rows.sort((a, b) => {
+            const aCell = a.cells[columnIndex];
+            const bCell = b.cells[columnIndex];
+            const aValue = aCell ? (aCell.getAttribute('data-sort-value') || aCell.textContent.trim()) : '';
+            const bValue = bCell ? (bCell.getAttribute('data-sort-value') || bCell.textContent.trim()) : '';
+            
+            let aCompare = aValue;
+            let bCompare = bValue;
+            
+            // Jeśli kolumna ID (index 0), spróbuj wyciągnąć numer z klucza (np. "ONE-123" -> 123)
+            if (columnIndex === 0) {
+                const aMatch = aValue.match(/-(\d+)$/);
+                const bMatch = bValue.match(/-(\d+)$/);
+                if (aMatch && bMatch) {
+                    const aNum = parseInt(aMatch[1], 10);
+                    const bNum = parseInt(bMatch[1], 10);
+                    if (aNum !== bNum) {
+                        return ascending ? aNum - bNum : bNum - aNum;
+                    }
+                    // Jeśli numery są równe, sortuj alfabetycznie po całym kluczu
+                }
+                // Jeśli format nie pasuje, sortuj alfabetycznie
+            }
+            
+            // Sortowanie tekstowe (case-insensitive)
+            if (typeof aCompare === 'string' && typeof bCompare === 'string') {
+                aCompare = aCompare.toLowerCase();
+                bCompare = bCompare.toLowerCase();
+            }
+            
+            // Porównanie wartości
+            if (aCompare < bCompare) {
+                return ascending ? -1 : 1;
+            }
+            if (aCompare > bCompare) {
+                return ascending ? 1 : -1;
+            }
+            return 0;
+        });
+        
+        // Usuń wszystkie wiersze z tbody
+        rows.forEach(row => tbody.removeChild(row));
+        
+        // Dodaj posortowane wiersze z powrotem
+        rows.forEach(row => tbody.appendChild(row));
+    }
+    
+    // Funkcja do obsługi kliknięcia w nagłówek
+    function handleHeaderClick(event) {
+        const th = event.target.closest('th.sortable');
+        if (!th) return;
+        
+        const table = th.closest('table.sortable-table');
+        if (!table) return;
+        
+        const columnIndex = Array.from(th.parentElement.children).indexOf(th);
+        
+        // Sprawdź aktualny stan sortowania
+        const isCurrentlyAsc = th.classList.contains('sort-asc');
+        const isCurrentlyDesc = th.classList.contains('sort-desc');
+        
+        // Usuń wszystkie klasy sortowania z nagłówków w tej tabeli
+        table.querySelectorAll('th.sortable').forEach(header => {
+            header.classList.remove('sort-asc', 'sort-desc');
+        });
+        
+        // Przełącz sortowanie: brak -> asc -> desc -> asc
+        let isAscending;
+        if (!isCurrentlyAsc && !isCurrentlyDesc) {
+            // Pierwsze kliknięcie - sortuj rosnąco
+            isAscending = true;
+        } else if (isCurrentlyAsc) {
+            // Kolejne kliknięcie - zmień na malejąco
+            isAscending = false;
+        } else {
+            // Jest desc, zmień na rosnąco
+            isAscending = true;
+        }
+        
+        // Dodaj odpowiednią klasę
+        th.classList.add(isAscending ? 'sort-asc' : 'sort-desc');
+        
+        // Sortuj tabelę
+        sortTable(table, columnIndex, isAscending);
+    }
+    
+        // Dodaj event listenery do wszystkich sortowalnych tabel
+        document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('table.sortable-table').forEach(table => {
+            table.querySelectorAll('th.sortable').forEach(th => {
+                th.addEventListener('click', handleHeaderClick);
+            });
+        });
+        
+        // Dodaj event listenery do klikalnych liczb niepodlinkowanych
+        document.querySelectorAll('.unlinked-count.clickable').forEach(element => {
+            element.addEventListener('click', function() {
+                const issueType = this.getAttribute('data-issue-type');
+                const expectedParent = this.getAttribute('data-expected-parent');
+                showUnlinkedIssues(issueType, expectedParent);
+            });
+        });
+        
+        // Dodaj event listenery do klikalnych typów issue
+        document.querySelectorAll('.issue-type-clickable').forEach(element => {
+            element.addEventListener('click', function() {
+                const issueType = this.getAttribute('data-issue-type');
+                showAllIssuesByType(issueType);
+            });
+        });
+    });
+})();
+
+// Funkcje do obsługi modala
+let modalIssuesData = [];
+let modalCurrentSort = { column: null, ascending: true };
+
+function showUnlinkedIssues(issueType, expectedParent) {
+    const modal = document.getElementById('unlinkedModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalContent = document.getElementById('modalContent');
+    
+    modalTitle.textContent = `Unlinked ${issueType} Issues (should be linked to ${expectedParent})`;
+    modalContent.innerHTML = '<div class="loading">Loading...</div>';
+    modal.classList.add('active');
+    modalCurrentSort = { column: null, ascending: true };
+    
+    // Pobierz dane z API
+    fetch(`/api/unlinked/${encodeURIComponent(issueType)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.issues && data.issues.length > 0) {
+                modalIssuesData = data.issues;
+                renderModalTable(data.issues, data.count, issueType);
+            } else {
+                modalContent.innerHTML = '<div class="loading">No unlinked issues found.</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading unlinked issues:', error);
+            modalContent.innerHTML = '<div class="loading" style="color: #dc2626;">Error loading issues. Please try again.</div>';
+        });
+}
+
+function renderModalTable(issues, totalCount, issueType) {
+    const modalContent = document.getElementById('modalContent');
+    
+    let html = `
+        <p style="margin-bottom: 1rem; color: #666;">Found <strong>${totalCount}</strong> unlinked ${issueType.toLowerCase()} issue(s):</p>
+        <div class="filter-row">
+            <input type="text" class="modal-filter" id="filter-id" placeholder="Filter ID..." onkeyup="filterModalTable()">
+            <input type="text" class="modal-filter" id="filter-summary" placeholder="Filter Summary..." onkeyup="filterModalTable()">
+            <input type="text" class="modal-filter" id="filter-created" placeholder="Filter Created Date..." onkeyup="filterModalTable()">
+            <input type="text" class="modal-filter" id="filter-creator" placeholder="Filter Creator..." onkeyup="filterModalTable()">
+            <input type="text" class="modal-filter" id="filter-reporter" placeholder="Filter Reporter..." onkeyup="filterModalTable()">
+        </div>
+        <table class="modal-table" id="modalTable">
+            <thead>
+                <tr>
+                    <th class="sortable" data-column="key" onclick="sortModalTable('key')">ID</th>
+                    <th class="sortable" data-column="summary" onclick="sortModalTable('summary')">Summary</th>
+                    <th class="sortable" data-column="created_date" onclick="sortModalTable('created_date')">Created Date</th>
+                    <th class="sortable" data-column="creator_name" onclick="sortModalTable('creator_name')">Creator</th>
+                    <th class="sortable" data-column="reporter_name" onclick="sortModalTable('reporter_name')">Reporter</th>
+                </tr>
+            </thead>
+            <tbody id="modalTableBody">
+    `;
+    
+    issues.forEach(issue => {
+        const jiraLink = JIRA_URL ? `${JIRA_URL}/browse/${issue.key}` : '#';
+        html += `
+            <tr>
+                <td data-value="${escapeHtml(issue.key)}">
+                    <a href="${jiraLink}" target="_blank" class="issue-id" ${!JIRA_URL ? 'onclick="return false;"' : ''}>
+                        ${escapeHtml(issue.key)}
+                    </a>
+                </td>
+                <td data-value="${escapeHtml(issue.summary.toLowerCase())}">${escapeHtml(issue.summary)}</td>
+                <td data-value="${issue.created_date}">${issue.created_date}</td>
+                <td data-value="${escapeHtml(issue.creator_name.toLowerCase())}">${escapeHtml(issue.creator_name)}</td>
+                <td data-value="${escapeHtml((issue.reporter_name || 'Unknown').toLowerCase())}">${escapeHtml(issue.reporter_name || 'Unknown')}</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+            </tbody>
+        </table>
+        <p id="modalFilterCount" style="margin-top: 0.5rem; color: #666; font-size: 0.9rem;"></p>
+    `;
+    
+    modalContent.innerHTML = html;
+    // Poczekaj na renderowanie DOM
+    setTimeout(() => {
+        updateModalFilterCount();
+    }, 0);
+}
+
+function filterModalTable() {
+    const filterId = document.getElementById('filter-id')?.value.toLowerCase() || '';
+    const filterSummary = document.getElementById('filter-summary')?.value.toLowerCase() || '';
+    const filterCreated = document.getElementById('filter-created')?.value.toLowerCase() || '';
+    const filterCreator = document.getElementById('filter-creator')?.value.toLowerCase() || '';
+    const filterReporter = document.getElementById('filter-reporter')?.value.toLowerCase() || '';
+    
+    const tbody = document.getElementById('modalTableBody');
+    if (!tbody) return;
+    
+    const rows = tbody.querySelectorAll('tr');
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        const idMatch = !filterId || (cells[0]?.getAttribute('data-value') || '').toLowerCase().includes(filterId);
+        const summaryMatch = !filterSummary || (cells[1]?.getAttribute('data-value') || '').includes(filterSummary);
+        const createdMatch = !filterCreated || (cells[2]?.getAttribute('data-value') || '').toLowerCase().includes(filterCreated);
+        const creatorMatch = !filterCreator || (cells[3]?.getAttribute('data-value') || '').includes(filterCreator);
+        const reporterMatch = !filterReporter || (cells[4]?.getAttribute('data-value') || '').includes(filterReporter);
+        
+        if (idMatch && summaryMatch && createdMatch && creatorMatch && reporterMatch) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    updateModalFilterCount(visibleCount);
+}
+
+function sortModalTable(column) {
+    const tbody = document.getElementById('modalTableBody');
+    if (!tbody) return;
+    
+    // Usuń wszystkie klasy sortowania
+    document.querySelectorAll('#modalTable th.sortable').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+    });
+    
+    // Ustaw nowy stan sortowania
+    const isAscending = modalCurrentSort.column === column ? !modalCurrentSort.ascending : true;
+    modalCurrentSort = { column, ascending: isAscending };
+    
+    // Dodaj klasę do odpowiedniego nagłówka
+    const header = document.querySelector(`#modalTable th[data-column="${column}"]`);
+    if (header) {
+        header.classList.add(isAscending ? 'sort-asc' : 'sort-desc');
+    }
+    
+    // Pobierz wszystkie wiersze
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    // Sortuj wiersze
+    rows.sort((a, b) => {
+        const cellsA = a.querySelectorAll('td');
+        const cellsB = b.querySelectorAll('td');
+        
+        let index = 0;
+        if (column === 'key') index = 0;
+        else if (column === 'summary') index = 1;
+        else if (column === 'created_date') index = 2;
+        else if (column === 'creator_name') index = 3;
+        else if (column === 'reporter_name') index = 4;
+        
+        const valueA = cellsA[index]?.getAttribute('data-value') || cellsA[index]?.textContent.trim() || '';
+        const valueB = cellsB[index]?.getAttribute('data-value') || cellsB[index]?.textContent.trim() || '';
+        
+        // Dla kolumny ID, spróbuj wyciągnąć numer
+        if (column === 'key') {
+            const matchA = valueA.match(/-(\d+)$/);
+            const matchB = valueB.match(/-(\d+)$/);
+            if (matchA && matchB) {
+                const numA = parseInt(matchA[1], 10);
+                const numB = parseInt(matchB[1], 10);
+                if (numA !== numB) {
+                    return isAscending ? numA - numB : numB - numA;
+                }
+            }
+        }
+        
+        // Sortowanie tekstowe (case-insensitive)
+        const compareA = valueA.toLowerCase();
+        const compareB = valueB.toLowerCase();
+        
+        if (compareA < compareB) return isAscending ? -1 : 1;
+        if (compareA > compareB) return isAscending ? 1 : -1;
+        return 0;
+    });
+    
+    // Usuń wszystkie wiersze z tbody
+    rows.forEach(row => tbody.removeChild(row));
+    
+    // Dodaj posortowane wiersze z powrotem
+    rows.forEach(row => tbody.appendChild(row));
+    
+    // Zastosuj filtry ponownie (zachowaj widoczność wierszy)
+    const filterId = document.getElementById('filter-id')?.value.toLowerCase() || '';
+    const filterSummary = document.getElementById('filter-summary')?.value.toLowerCase() || '';
+    const filterCreated = document.getElementById('filter-created')?.value.toLowerCase() || '';
+    const filterCreator = document.getElementById('filter-creator')?.value.toLowerCase() || '';
+    const filterReporter = document.getElementById('filter-reporter')?.value.toLowerCase() || '';
+    
+    let visibleCount = 0;
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        const idMatch = !filterId || (cells[0]?.getAttribute('data-value') || '').toLowerCase().includes(filterId);
+        const summaryMatch = !filterSummary || (cells[1]?.getAttribute('data-value') || '').includes(filterSummary);
+        const createdMatch = !filterCreated || (cells[2]?.getAttribute('data-value') || '').toLowerCase().includes(filterCreated);
+        const creatorMatch = !filterCreator || (cells[3]?.getAttribute('data-value') || '').includes(filterCreator);
+        const reporterMatch = !filterReporter || (cells[4]?.getAttribute('data-value') || '').includes(filterReporter);
+        
+        if (idMatch && summaryMatch && createdMatch && creatorMatch && reporterMatch) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    updateModalFilterCount(visibleCount);
+}
+
+function updateModalFilterCount(visibleCount) {
+    const countElement = document.getElementById('modalFilterCount');
+    if (!countElement) return;
+    
+    const tbody = document.getElementById('modalTableBody');
+    if (!tbody) return;
+    
+    const totalCount = tbody.querySelectorAll('tr').length;
+    let shownCount = visibleCount;
+    
+    // Jeśli visibleCount nie został podany, policz widoczne wiersze
+    if (shownCount === undefined) {
+        shownCount = Array.from(tbody.querySelectorAll('tr')).filter(row => row.style.display !== 'none').length;
+    }
+    
+    if (shownCount === totalCount) {
+        countElement.textContent = `Showing all ${totalCount} issue(s)`;
+    } else {
+        countElement.textContent = `Showing ${shownCount} of ${totalCount} issue(s)`;
+    }
+}
+
+function showAllIssuesByType(issueType) {
+    const modal = document.getElementById('unlinkedModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalContent = document.getElementById('modalContent');
+    
+    modalTitle.textContent = `All ${issueType} Issues`;
+    modalContent.innerHTML = '<div class="loading">Loading...</div>';
+    modal.classList.add('active');
+    
+    // Pobierz dane z API
+    fetch(`/api/all/${encodeURIComponent(issueType)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.issues && data.issues.length > 0) {
+                let html = `
+                    <p style="margin-bottom: 1rem; color: #666;">Found <strong>${data.count}</strong> ${issueType.toLowerCase()} issue(s):</p>
+                    <table class="modal-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Summary</th>
+                                <th>Created Date</th>
+                                <th>Creator</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                data.issues.forEach(issue => {
+                    const jiraLink = JIRA_URL ? `${JIRA_URL}/browse/${issue.key}` : '#';
+                    const statusBadge = issue.has_parent 
+                        ? '<span style="color: #16a34a;">✓ Linked</span>' 
+                        : '<span style="color: #dc2626;">✗ Unlinked</span>';
+                    
+                    html += `
+                        <tr>
+                            <td>
+                                <a href="${jiraLink}" target="_blank" class="issue-id" ${!JIRA_URL ? 'onclick="return false;"' : ''}>
+                                    ${issue.key}
+                                </a>
+                            </td>
+                            <td>${escapeHtml(issue.summary)}</td>
+                            <td>${issue.created_date}</td>
+                            <td>${escapeHtml(issue.creator_name)}</td>
+                            <td>${statusBadge}</td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
+                        </tbody>
+                    </table>
+                `;
+                
+                modalContent.innerHTML = html;
+            } else {
+                modalContent.innerHTML = '<div class="loading">No issues found.</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading issues:', error);
+            modalContent.innerHTML = '<div class="loading" style="color: #dc2626;">Error loading issues. Please try again.</div>';
+        });
+}
+
+function closeModal() {
+    const modal = document.getElementById('unlinkedModal');
+    modal.classList.remove('active');
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Zamknij modal po kliknięciu w overlay
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('unlinkedModal');
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+    
+    // Zamknij modal po naciśnięciu ESC
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('active')) {
+            closeModal();
+        }
+    });
+});
+</script>
+</body>
+</html>
