@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Uruchamia fetch_jira_issues.py w virtualenv z automatycznym tworzeniem venv.
-# Działa z dowolnego miejsca - automatycznie znajduje katalog projektu.
+# Runs fetch_jira_issues.py in virtualenv with automatic venv creation.
+# Works from anywhere - automatically finds the project directory.
 
 set -Eeuo pipefail
 
-# Znajdź katalog projektu na podstawie lokalizacji tego skryptu
+# Find project directory based on this script's location
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR"
 DEFAULT_PYTHON_SCRIPT="$PROJECT_DIR/fetch_jira_issues.py"
@@ -20,28 +20,28 @@ NUM_WORKERS=""
 
 usage() {
   cat <<'USAGE'
-Użycie:
-  run_python_venv.sh [startDate] [endDate] [numWorkers] [opcje]
+Usage:
+  run_python_venv.sh [startDate] [endDate] [numWorkers] [options]
 
-Argumenty:
-  startDate     Data początkowa w formacie YYYY-MM-DD (wymagane)
-  endDate       Data końcowa w formacie YYYY-MM-DD (wymagane)
-  numWorkers    Opcjonalna liczba równoległych wątków (domyślnie: 5)
+Arguments:
+  startDate     Start date in YYYY-MM-DD format (required)
+  endDate       End date in YYYY-MM-DD format (required)
+  numWorkers    Optional number of parallel threads (default: 5)
 
-Opcje:
-  -l, --log     FILE    Zapisz stdout/stderr do pliku (przydatne pod cron)
-      --cron            Tryb pod cron: ustawia bezpieczne minimum środowiska
-  -h, --help            Pomoc
+Options:
+  -l, --log     FILE    Save stdout/stderr to file (useful for cron)
+      --cron            Cron mode: sets safe minimum environment
+  -h, --help            Help
 
-Przykłady:
+Examples:
   ./run_python_venv.sh 2024-01-01 2024-12-31
   ./run_python_venv.sh 2024-01-01 2024-12-31 10
   ./run_python_venv.sh 2024-01-01 2024-12-31 --log /tmp/jira-agent.log
 USAGE
 }
 
-# --- parsowanie argumentów ---
-# Najpierw przetwórz wszystkie opcje
+# --- argument parsing ---
+# First process all options
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -52,7 +52,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       usage; exit 0 ;;
     -*)
-      echo "❌ Nieznana opcja: $1" >&2
+      echo "❌ Unknown option: $1" >&2
       usage >&2
       exit 1 ;;
     *)
@@ -60,7 +60,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Teraz przetwórz argumenty pozycyjne (daty i workers)
+# Now process positional arguments (dates and workers)
 for arg in "${POSITIONAL_ARGS[@]}"; do
   if [[ -z "$START_DATE" ]]; then
     START_DATE="$arg"
@@ -69,37 +69,37 @@ for arg in "${POSITIONAL_ARGS[@]}"; do
   elif [[ -z "$NUM_WORKERS" ]]; then
     NUM_WORKERS="$arg"
   else
-    echo "❌ Zbyt wiele argumentów: $arg" >&2
+    echo "❌ Too many arguments: $arg" >&2
     usage >&2
     exit 1
   fi
 done
 
-# Walidacja wymaganych argumentów
+# Validate required arguments
 if [[ -z "$START_DATE" ]] || [[ -z "$END_DATE" ]]; then
-  echo "❌ Błąd: wymagane są argumenty startDate i endDate" >&2
+  echo "❌ Error: startDate and endDate arguments are required" >&2
   usage >&2
   exit 1
 fi
 
-# Przygotuj argumenty dla fetch_jira_issues.py
+# Prepare arguments for fetch_jira_issues.py
 PY_ARGS=("$START_DATE" "$END_DATE")
 if [[ -n "$NUM_WORKERS" ]]; then
   PY_ARGS+=("$NUM_WORKERS")
 fi
 
-# Używamy domyślnych ścieżek
+# Use default paths
 PYTHON_SCRIPT="$DEFAULT_PYTHON_SCRIPT"
 
-# --- tryb cron ---
-# Cron ma ubogie środowisko, więc ustawiamy sensowny PATH i trzymamy się absolutnych ścieżek.
+# --- cron mode ---
+# Cron has a minimal environment, so we set a sensible PATH and stick to absolute paths.
 if [[ "$CRON_MODE" -eq 1 ]]; then
   export LANG="${LANG:-en_US.UTF-8}"
   export LC_ALL="${LC_ALL:-en_US.UTF-8}"
   export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 fi
 
-# Jeśli wskazano log, przekieruj cały output (również z activate/python)
+# If log is specified, redirect all output (including from activate/python)
 if [[ -n "$LOG_FILE" ]]; then
   mkdir -p "$(dirname "$LOG_FILE")"
   exec >>"$LOG_FILE" 2>&1
@@ -109,7 +109,7 @@ fi
 # --- cleanup / trap ---
 cleanup() {
   local exit_code=$?
-  # deactivate istnieje dopiero po aktywacji; sprawdzamy bezpiecznie
+  # deactivate only exists after activation; check safely
   if [[ -n "${VIRTUAL_ENV:-}" ]]; then
     # shellcheck disable=SC2317
     deactivate || true
@@ -121,16 +121,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# --- walidacje ---
+# --- validations ---
 if [[ ! -d "$PROJECT_DIR" ]]; then
-  echo "❌ Katalog projektu nie istnieje: $PROJECT_DIR" >&2
+  echo "❌ Project directory does not exist: $PROJECT_DIR" >&2
   exit 1
 fi
 
-# --- auto-tworzenie virtualenv ---
+# --- auto-create virtualenv ---
 VENV_CREATED=0
 if [[ ! -d "$VENV_DIR" ]]; then
-  echo "ℹ️  Virtualenv nie istnieje, tworzę nowy: $VENV_DIR"
+  echo "ℹ️  Virtualenv does not exist, creating new one: $VENV_DIR"
   if command -v python3 >/dev/null 2>&1; then
     python3 -m venv "$VENV_DIR"
     VENV_CREATED=1
@@ -138,45 +138,45 @@ if [[ ! -d "$VENV_DIR" ]]; then
     python -m venv "$VENV_DIR"
     VENV_CREATED=1
   else
-    echo "❌ Nie znaleziono python3 ani python w PATH" >&2
+    echo "❌ python3 or python not found in PATH" >&2
     exit 1
   fi
 fi
 
 if [[ ! -d "$VENV_DIR" ]]; then
-  echo "❌ Virtualenv nie istnieje: $VENV_DIR" >&2
-  echo "Utwórz go poleceniem: python3 -m venv '$VENV_DIR'" >&2
+  echo "❌ Virtualenv does not exist: $VENV_DIR" >&2
+  echo "Create it with: python3 -m venv '$VENV_DIR'" >&2
   exit 1
 fi
 
 if [[ ! -f "$PYTHON_SCRIPT" ]]; then
-  echo "❌ Nie znaleziono pliku Pythona: $PYTHON_SCRIPT" >&2
+  echo "❌ Python file not found: $PYTHON_SCRIPT" >&2
   exit 1
 fi
 
-# Pracuj w katalogu projektu (ważne, gdy skrypt używa plików względnych)
+# Work in project directory (important when script uses relative files)
 cd "$PROJECT_DIR"
 
-# Aktywacja virtualenv
+# Activate virtualenv
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
 
-# --- instalacja zależności ---
+# --- install dependencies ---
 REQUIREMENTS_FILE="$PROJECT_DIR/requirements.txt"
 if [[ -f "$REQUIREMENTS_FILE" ]]; then
-  # Sprawdź czy pakiety są zainstalowane (sprawdzamy requests jako przykład)
+  # Check if packages are installed (check requests as an example)
   if [[ "$VENV_CREATED" -eq 1 ]] || ! python -c "import requests" 2>/dev/null; then
-    echo "ℹ️  Instalowanie zależności z requirements.txt..."
+    echo "ℹ️  Installing dependencies from requirements.txt..."
     python -m pip install --upgrade pip --quiet
     python -m pip install -r "$REQUIREMENTS_FILE" --quiet
-    echo "✅ Zależności zainstalowane"
+    echo "✅ Dependencies installed"
   fi
 elif [[ "$VENV_CREATED" -eq 1 ]]; then
-  # Jeśli venv został właśnie utworzony, ale nie ma requirements.txt, zainstaluj podstawowe pakiety
-  echo "ℹ️  Instalowanie podstawowych zależności..."
+  # If venv was just created but no requirements.txt, install basic packages
+  echo "ℹ️  Installing basic dependencies..."
   python -m pip install --upgrade pip --quiet
   python -m pip install requests python-dotenv --quiet
-  echo "✅ Podstawowe zależności zainstalowane"
+  echo "✅ Basic dependencies installed"
 fi
 
 echo "✅ Project:    $PROJECT_DIR"
@@ -190,9 +190,9 @@ if [[ -n "$NUM_WORKERS" ]]; then
 fi
 
 echo ""
-echo "▶️  Uruchamianie fetch_jira_issues.py..."
+echo "▶️  Running fetch_jira_issues.py..."
 python "$PYTHON_SCRIPT" "${PY_ARGS[@]}"
 
 echo ""
-echo "🏁 Program zakończony"
+echo "🏁 Program finished"
 

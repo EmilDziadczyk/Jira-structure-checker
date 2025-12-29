@@ -10,10 +10,16 @@ venv/
 env/
 ENV/
 .venv
+!env.example
 
-# Environment variables
+# Environment variables - NIGDY nie commituj plików z tokenami!
 .env
+.env.*
+!.env.example
 .env.local
+.env.production
+.env.development
+*.env
 
 # IDE
 .idea/

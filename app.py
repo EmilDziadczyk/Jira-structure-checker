@@ -13,32 +13,32 @@ app = Flask(__name__)
 DATA_FILE = "jira_issues_raw.json"  # or "jira_issues.json" if you renamed it
 JIRA_URL = os.getenv("JIRA_URL", "")
 
-# Cache dla danych
+# Data cache
 _issues_cache = None
 _file_mtime = None
-_unlinked_cache = {}  # Cache dla wyników get_unlinked_issues: {issue_type: result}
-_all_by_type_cache = {}  # Cache dla wyników get_all_issues_by_type: {issue_type: result}
+_unlinked_cache = {}  # Cache for get_unlinked_issues results: {issue_type: result}
+_all_by_type_cache = {}  # Cache for get_all_issues_by_type results: {issue_type: result}
 
 
 def load_issues():
     """
-    Ładuje dane z pliku JSON z cache'owaniem w pamięci.
-    Cache jest automatycznie odświeżany, gdy plik się zmieni.
+    Loads data from JSON file with in-memory caching.
+    Cache is automatically refreshed when the file changes.
     """
     global _issues_cache, _file_mtime
     
     if not os.path.exists(DATA_FILE):
         abort(500, f"Data file {DATA_FILE} not found. Run fetch_jira_issues.py first.")
     
-    # Sprawdź czas modyfikacji pliku
+    # Check file modification time
     current_mtime = os.path.getmtime(DATA_FILE)
     
-    # Jeśli cache jest pusty lub plik się zmienił, załaduj dane
+    # If cache is empty or file has changed, load data
     if _issues_cache is None or _file_mtime != current_mtime:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             _issues_cache = json.load(f)
         _file_mtime = current_mtime
-        # Wyczyść cache wyników funkcji, gdy dane się zmieniły
+        # Clear function result cache when data changes
         _unlinked_cache.clear()
         _all_by_type_cache.clear()
     
@@ -47,7 +47,7 @@ def load_issues():
 
 def get_expected_parent_type(issue_type):
     """
-    Zwraca oczekiwany typ parenta dla danego typu issue.
+    Returns the expected parent type for a given issue type.
     """
     if issue_type == "Epic":
         return "Initiative"
@@ -60,7 +60,7 @@ def get_expected_parent_type(issue_type):
 
 def has_correct_parent(issue_type, parent):
     """
-    Sprawdza czy issue ma odpowiedniego parenta zgodnie z hierarchią.
+    Checks if an issue has the correct parent according to the hierarchy.
     """
     if not parent:
         return False
@@ -80,13 +80,13 @@ def has_correct_parent(issue_type, parent):
 
 def count_issues_by_type(issues):
     """
-    Liczy zgłoszenia według typu i zwraca informacje o niepodpiętych.
+    Counts issues by type and returns information about unlinked ones.
     
     Returns:
-        dict z kluczami typu issue, wartościami zawierającymi:
-        - total: całkowita liczba zgłoszeń tego typu
-        - unlinked: liczba niepodpiętych zgłoszeń
-        - expected_parent: typ oczekiwanego parenta (lub None)
+        dict with issue type keys, values containing:
+        - total: total number of issues of this type
+        - unlinked: number of unlinked issues
+        - expected_parent: expected parent type (or None)
     """
     result = {}
     
@@ -95,7 +95,7 @@ def count_issues_by_type(issues):
         issue_type = fields.get("issuetype", {}).get("name", "Unknown")
         parent = fields.get("parent")
         
-        # Inicjalizuj słownik dla nowego typu
+        # Initialize dictionary for new type
         if issue_type not in result:
             expected_parent = get_expected_parent_type(issue_type)
             result[issue_type] = {
@@ -106,7 +106,7 @@ def count_issues_by_type(issues):
         
         result[issue_type]["total"] += 1
         
-        # Sprawdź czy jest niepodpięty
+        # Check if it's unlinked
         if result[issue_type]["expected_parent"]:
             if not has_correct_parent(issue_type, parent):
                 result[issue_type]["unlinked"] += 1
@@ -135,11 +135,11 @@ def filter_issues_by_type(issues, desired_type, unlinked_only=False):
         fields = issue.get("fields", {})
         issue_type = fields.get("issuetype", {}).get("name")
         if issue_type == desired_type:
-            # Jeśli filtrujemy tylko niepodpięte, sprawdź czy issue jest niepodpięte
+            # If filtering only unlinked, check if issue is unlinked
             if unlinked_only:
                 parent = fields.get("parent")
                 if has_correct_parent(issue_type, parent):
-                    continue  # Pomiń podpięte
+                    continue  # Skip linked issues
             
             key = issue.get("key", "")
             summary = fields.get("summary", "")
@@ -151,15 +151,15 @@ def filter_issues_by_type(issues, desired_type, unlinked_only=False):
 
 def get_all_issues_by_type(issues, issue_type):
     """
-    Zwraca listę wszystkich zgłoszeń danego typu (nie tylko niepodpiętych).
-    Wyniki są cache'owane w pamięci dla szybszego dostępu.
+    Returns a list of all issues of a given type (not only unlinked ones).
+    Results are cached in memory for faster access.
     
     Returns:
-        Lista słowników z kluczami: key, summary, created_date, creator_name, has_parent
+        List of dictionaries with keys: key, summary, created_date, creator_name, has_parent
     """
     global _all_by_type_cache
     
-    # Sprawdź cache
+    # Check cache
     if issue_type in _all_by_type_cache:
         return _all_by_type_cache[issue_type]
     
@@ -191,10 +191,10 @@ def get_all_issues_by_type(issues, issue_type):
             "has_parent": has_parent
         })
     
-    # Sortuj po dacie utworzenia (najnowsze pierwsze)
+    # Sort by creation date (newest first)
     result.sort(key=lambda x: x["created_date"], reverse=True)
     
-    # Zapisz w cache
+    # Save to cache
     _all_by_type_cache[issue_type] = result
     
     return result
@@ -202,15 +202,15 @@ def get_all_issues_by_type(issues, issue_type):
 
 def get_unlinked_issues(issues, issue_type):
     """
-    Zwraca listę niepodlinkowanych zgłoszeń danego typu.
-    Wyniki są cache'owane w pamięci dla szybszego dostępu.
+    Returns a list of unlinked issues of a given type.
+    Results are cached in memory for faster access.
     
     Returns:
-        Lista słowników z kluczami: key, summary, created_date, creator_name, reporter_name
+        List of dictionaries with keys: key, summary, created_date, creator_name, reporter_name
     """
     global _unlinked_cache
     
-    # Sprawdź cache
+    # Check cache
     if issue_type in _unlinked_cache:
         return _unlinked_cache[issue_type]
     
@@ -230,7 +230,7 @@ def get_unlinked_issues(issues, issue_type):
         
         parent = fields.get("parent")
         
-        # Sprawdź czy jest niepodpięty
+        # Check if it's unlinked
         if not has_correct_parent(issue_type, parent):
             key = issue.get("key", "")
             summary = fields.get("summary", "")
@@ -251,10 +251,10 @@ def get_unlinked_issues(issues, issue_type):
                 "reporter_name": reporter_name
             })
     
-    # Sortuj po dacie utworzenia (najnowsze pierwsze)
+    # Sort by creation date (newest first)
     result.sort(key=lambda x: x["created_date"], reverse=True)
     
-    # Zapisz w cache
+    # Save to cache
     _unlinked_cache[issue_type] = result
     
     return result
@@ -281,7 +281,7 @@ def index():
         key=lambda x: x[0]
     )
 
-    # Filtruj tylko niepodpięte dla kolumn
+    # Filter only unlinked for columns
     epics = filter_issues_by_type(issues, "Epic", unlinked_only=True)
     stories = filter_issues_by_type(issues, "Story", unlinked_only=True)
     tasks = filter_issues_by_type(issues, "Task", unlinked_only=True)
@@ -301,7 +301,7 @@ def index():
 @app.route("/api/unlinked/<issue_type>")
 def get_unlinked_api(issue_type):
     """
-    API endpoint zwracający listę niepodlinkowanych zgłoszeń dla danego typu.
+    API endpoint returning a list of unlinked issues for a given type.
     """
     issues = load_issues()
     unlinked = get_unlinked_issues(issues, issue_type)
@@ -316,7 +316,7 @@ def get_unlinked_api(issue_type):
 @app.route("/api/all/<issue_type>")
 def get_all_by_type_api(issue_type):
     """
-    API endpoint zwracający listę wszystkich zgłoszeń danego typu.
+    API endpoint returning a list of all issues of a given type.
     """
     issues = load_issues()
     all_issues = get_all_issues_by_type(issues, issue_type)
@@ -331,7 +331,7 @@ def get_all_by_type_api(issue_type):
 if __name__ == "__main__":
     import sys
     
-    # Obsługa argumentów --host i --port
+    # Handle --host and --port arguments
     host = "127.0.0.1"
     port = 5000
     debug = True

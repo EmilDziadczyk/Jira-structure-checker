@@ -1,29 +1,29 @@
 # Jira Agent
 
-Aplikacja do analizy i wizualizacji zgłoszeń z Jira. Pozwala na przeglądanie zgłoszeń, identyfikację niepodpiętych elementów oraz analizę hierarchii zadań.
+Application for analyzing and visualizing Jira issues. Allows browsing issues, identifying unlinked elements, and analyzing task hierarchy.
 
-## Funkcjonalności
+## Features
 
-- Pobieranie zgłoszeń z Jira API
-- Wizualizacja zgłoszeń w interfejsie webowym
-- Identyfikacja niepodpiętych Epików, Stories i Tasków
-- Filtrowanie i sortowanie zgłoszeń
-- Cache w pamięci dla szybkiego dostępu do danych
+- Fetching issues from Jira API
+- Web interface for visualizing issues
+- Identification of unlinked Epics, Stories, and Tasks
+- Filtering and sorting issues
+- In-memory cache for fast data access
 
-## Wymagania
+## Requirements
 
 - Python 3.8+
-- Dostęp do Jira API (URL, email, token)
+- Access to Jira API (URL, email, token)
 
-## Instalacja
+## Installation
 
-1. Sklonuj repozytorium:
+1. Clone the repository:
 ```bash
 git clone <repository-url>
 cd jira-agent
 ```
 
-2. Utwórz plik `.env` z konfiguracją:
+2. Create a `.env` file with configuration:
 ```
 JIRA_URL=https://your-domain.atlassian.net
 JIRA_EMAIL=your-email@example.com
@@ -31,49 +31,48 @@ JIRA_TOKEN=your-api-token
 PROJECT_KEY=YOUR_PROJECT_KEY
 ```
 
-3. Zainstaluj zależności (automatycznie przy pierwszym uruchomieniu):
+3. Install dependencies (automatically on first run):
 ```bash
 ./run_python_venv.sh 2024-01-01 2024-12-31
 ```
 
-## Użycie
+## Usage
 
-### Pobieranie danych z Jira
+### Fetching data from Jira
 
 ```bash
 ./run_python_venv.sh <start_date> <end_date> [num_workers]
 ```
 
-Przykład:
+Example:
 ```bash
 ./run_python_venv.sh 2024-01-01 2024-12-31
 ```
 
-### Uruchomienie aplikacji webowej
+### Running the web application
 
 ```bash
 ./run_web_app.sh
 ```
 
-Aplikacja będzie dostępna pod adresem: http://127.0.0.1:5000
+The application will be available at: http://127.0.0.1:5000
 
-### Opcje uruchomienia aplikacji webowej
+### Web application options
 
 ```bash
 ./run_web_app.sh --port 8080
 ./run_web_app.sh --host 0.0.0.0 --port 8080
 ```
 
-## Struktura projektu
+## Project Structure
 
-- `fetch_jira_issues.py` - Skrypt do pobierania zgłoszeń z Jira
-- `app.py` - Aplikacja Flask z interfejsem webowym
-- `run_python_venv.sh` - Skrypt do uruchamiania fetch_jira_issues.py
-- `run_web_app.sh` - Skrypt do uruchamiania aplikacji webowej
-- `templates/index.html` - Interfejs użytkownika
-- `requirements.txt` - Zależności Python
+- `fetch_jira_issues.py` - Script for fetching issues from Jira
+- `app.py` - Flask web application
+- `run_python_venv.sh` - Script to run fetch_jira_issues.py
+- `run_web_app.sh` - Script to run the web application
+- `templates/index.html` - User interface
+- `requirements.txt` - Python dependencies
 
-## Licencja
+## License
 
 MIT
-

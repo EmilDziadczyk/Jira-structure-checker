@@ -19,8 +19,8 @@ OUTPUT_FILE = "jira_issues_raw.json"
 # ⚠️ For corporate/self-signed TLS. Set to True if you have proper CA configured.
 VERIFY_SSL = False
 
-# Liczba równoległych wątków do pobierania danych
-# Domyślnie 5, można zwiększyć jeśli Jira API to obsługuje
+# Number of parallel threads for fetching data
+# Default is 5, can be increased if Jira API supports it
 MAX_WORKERS = 5
 
 
@@ -124,15 +124,15 @@ def fetch_all_issues_for_project(project_key: str, start_date: str, end_date: st
 
 def split_date_range(start_date: str, end_date: str, num_chunks: int = None) -> List[Tuple[str, str]]:
     """
-    Dzieli zakres dat na mniejsze przedziały do równoległego pobierania.
+    Splits a date range into smaller intervals for parallel fetching.
     
     Args:
-        start_date: Data początkowa w formacie YYYY-MM-DD
-        end_date: Data końcowa w formacie YYYY-MM-DD
-        num_chunks: Liczba przedziałów (jeśli None, używa MAX_WORKERS)
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+        num_chunks: Number of intervals (if None, uses MAX_WORKERS)
     
     Returns:
-        Lista krotek (start, end) reprezentujących przedziały dat
+        List of tuples (start, end) representing date intervals
     """
     if num_chunks is None:
         num_chunks = MAX_WORKERS
@@ -145,11 +145,11 @@ def split_date_range(start_date: str, end_date: str, num_chunks: int = None) -> 
     if total_days <= 0:
         return [(start_date, end_date)]
     
-    # Jeśli zakres jest mały, nie dziel go
+    # If the range is small, don't split it
     if total_days <= 30:
         return [(start_date, end_date)]
     
-    # Dziel na przedziały (co najmniej 30 dni każdy)
+    # Split into intervals (at least 30 days each)
     days_per_chunk = max(30, total_days // num_chunks)
     chunks = []
     
@@ -167,8 +167,8 @@ def split_date_range(start_date: str, end_date: str, num_chunks: int = None) -> 
 
 def fetch_issues_for_date_range(project_key: str, start_date: str, end_date: str, chunk_id: int = None):
     """
-    Pobiera wszystkie zgłoszenia dla danego zakresu dat.
-    Używane jako funkcja wrapper do równoległego wykonania.
+    Fetches all issues for a given date range.
+    Used as a wrapper function for parallel execution.
     """
     try:
         prefix = f"[Chunk {chunk_id}] " if chunk_id is not None else ""
@@ -186,21 +186,21 @@ def fetch_issues_for_date_range(project_key: str, start_date: str, end_date: str
 
 def fetch_all_issues_parallel(project_key: str, start_date: str, end_date: str, num_workers: int = None):
     """
-    Pobiera wszystkie zgłoszenia równolegle przez podział zakresu dat na przedziały.
+    Fetches all issues in parallel by splitting the date range into intervals.
     
     Args:
-        project_key: Klucz projektu Jira
-        start_date: Data początkowa (YYYY-MM-DD)
-        end_date: Data końcowa (YYYY-MM-DD)
-        num_workers: Liczba równoległych wątków (domyślnie MAX_WORKERS)
+        project_key: Jira project key
+        start_date: Start date (YYYY-MM-DD)
+        end_date: End date (YYYY-MM-DD)
+        num_workers: Number of parallel threads (default MAX_WORKERS)
     
     Returns:
-        Lista wszystkich zgłoszeń
+        List of all issues
     """
     if num_workers is None:
         num_workers = MAX_WORKERS
     
-    # Podziel zakres dat na przedziały
+    # Split date range into intervals
     date_chunks = split_date_range(start_date, end_date, num_workers)
     
     print(f"\n{'='*60}")
@@ -212,15 +212,15 @@ def fetch_all_issues_parallel(project_key: str, start_date: str, end_date: str, 
     
     all_issues = []
     
-    # Równoległe pobieranie dla każdego przedziału dat
+    # Parallel fetching for each date interval
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        # Uruchom wszystkie zadania
+        # Start all tasks
         future_to_chunk = {
             executor.submit(fetch_issues_for_date_range, project_key, chunk_start, chunk_end, idx + 1): (chunk_start, chunk_end, idx + 1)
             for idx, (chunk_start, chunk_end) in enumerate(date_chunks)
         }
         
-        # Zbierz wyniki w miarę ich ukończenia
+        # Collect results as they complete
         for future in as_completed(future_to_chunk):
             chunk_start, chunk_end, chunk_id = future_to_chunk[future]
             try:
@@ -228,9 +228,9 @@ def fetch_all_issues_parallel(project_key: str, start_date: str, end_date: str, 
                 all_issues.extend(issues)
             except Exception as e:
                 print(f"[Chunk {chunk_id}] ERROR: {e}")
-                # Kontynuuj z innymi przedziałami mimo błędu
+                # Continue with other intervals despite error
     
-    # Sortuj wyniki po dacie utworzenia dla spójności
+    # Sort results by creation date for consistency
     all_issues.sort(key=lambda x: x.get("fields", {}).get("created", ""))
     
     return all_issues
@@ -263,7 +263,7 @@ def main():
     except ValueError:
         raise ValueError("Dates must be in YYYY-MM-DD format, e.g. 2024-01-01")
 
-    # Opcjonalnie można przekazać liczbę workerów jako 4 argument
+    # Optionally, number of workers can be passed as 4th argument
     num_workers = None
     if len(sys.argv) >= 4:
         try:
@@ -276,7 +276,7 @@ def main():
     print("Starting parallel fetch from Jira...")
     print("="*60 + "\n")
     
-    # Użyj równoległego pobierania
+    # Use parallel fetching
     issues = fetch_all_issues_parallel(PROJECT_KEY, start_date, end_date, num_workers)
 
     print(f"\n{'='*60}")
