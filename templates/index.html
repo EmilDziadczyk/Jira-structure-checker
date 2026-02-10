@@ -507,36 +507,26 @@ const JIRA_URL = {% if jira_url %}{{ jira_url|tojson }}{% else %}null{% endif %}
         
         const columnIndex = Array.from(th.parentElement.children).indexOf(th);
         
-        // Sprawdź aktualny stan sortowania
         const isCurrentlyAsc = th.classList.contains('sort-asc');
         const isCurrentlyDesc = th.classList.contains('sort-desc');
         
-        // Usuń wszystkie klasy sortowania z nagłówków w tej tabeli
         table.querySelectorAll('th.sortable').forEach(header => {
             header.classList.remove('sort-asc', 'sort-desc');
         });
         
-        // Przełącz sortowanie: brak -> asc -> desc -> asc
         let isAscending;
         if (!isCurrentlyAsc && !isCurrentlyDesc) {
-            // Pierwsze kliknięcie - sortuj rosnąco
             isAscending = true;
         } else if (isCurrentlyAsc) {
-            // Kolejne kliknięcie - zmień na malejąco
             isAscending = false;
         } else {
-            // Jest desc, zmień na rosnąco
             isAscending = true;
         }
         
-        // Dodaj odpowiednią klasę
         th.classList.add(isAscending ? 'sort-asc' : 'sort-desc');
-        
-        // Sortuj tabelę
         sortTable(table, columnIndex, isAscending);
     }
     
-        // Dodaj event listenery do wszystkich sortowalnych tabel
         document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('table.sortable-table').forEach(table => {
             table.querySelectorAll('th.sortable').forEach(th => {
@@ -544,7 +534,6 @@ const JIRA_URL = {% if jira_url %}{{ jira_url|tojson }}{% else %}null{% endif %}
             });
         });
         
-        // Dodaj event listenery do klikalnych liczb niepodlinkowanych
         document.querySelectorAll('.unlinked-count.clickable').forEach(element => {
             element.addEventListener('click', function() {
                 const issueType = this.getAttribute('data-issue-type');
@@ -553,7 +542,6 @@ const JIRA_URL = {% if jira_url %}{{ jira_url|tojson }}{% else %}null{% endif %}
             });
         });
         
-        // Dodaj event listenery do klikalnych typów issue
         document.querySelectorAll('.issue-type-clickable').forEach(element => {
             element.addEventListener('click', function() {
                 const issueType = this.getAttribute('data-issue-type');
@@ -561,7 +549,6 @@ const JIRA_URL = {% if jira_url %}{{ jira_url|tojson }}{% else %}null{% endif %}
             });
         });
         
-        // Klik w ilość obiektów Waiting for release
         const waitingLink = document.getElementById('waitingForReleaseCount');
         if (waitingLink) {
             waitingLink.addEventListener('click', function(e) {
@@ -572,7 +559,7 @@ const JIRA_URL = {% if jira_url %}{{ jira_url|tojson }}{% else %}null{% endif %}
     });
 })();
 
-// Funkcje do obsługi modala
+// Modal handling
 let modalIssuesData = [];
 let modalCurrentSort = { column: null, ascending: true };
 
@@ -586,7 +573,6 @@ function showUnlinkedIssues(issueType, expectedParent) {
     modal.classList.add('active');
     modalCurrentSort = { column: null, ascending: true };
     
-    // Pobierz dane z API
     fetch(`/api/unlinked/${encodeURIComponent(issueType)}`)
         .then(response => response.json())
         .then(data => {
