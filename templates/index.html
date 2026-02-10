@@ -4,136 +4,164 @@
     <meta charset="utf-8">
     <title>Jira Project Overview</title>
     <style>
+        /* Atlassian / Appfire BigPicture-inspired design tokens */
+        :root {
+            --ds-background-neutral: #F4F5F7;
+            --ds-background-default: #FFFFFF;
+            --ds-background-subtle: #FAFBFC;
+            --ds-border: #DFE1E6;
+            --ds-border-bold: #C1C7D0;
+            --ds-text: #172B4D;
+            --ds-text-subtle: #5E6C84;
+            --ds-text-subtler: #97A0AF;
+            --ds-link: #0052CC;
+            --ds-link-hover: #0065FF;
+            --ds-accent-blue-subtle: #DEEBFF;
+            --ds-success: #00875A;
+            --ds-danger: #DE350B;
+            --ds-danger-subtle: #FFEBE6;
+            --radius: 3px;
+            --radius-lg: 6px;
+        }
         body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            margin: 2rem;
-            background-color: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: var(--ds-background-neutral);
+            color: var(--ds-text);
+            font-size: 14px;
+            line-height: 1.5;
         }
         h1, h2, h3 {
-            margin-bottom: 0.5rem;
+            margin: 0 0 8px 0;
+            font-weight: 600;
+            color: var(--ds-text);
         }
+        h1 { font-size: 24px; }
+        h2 { font-size: 20px; margin-top: 24px; }
+        h3 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ds-text-subtle); }
         .card {
-            background: #ffffff;
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            background: var(--ds-background-default);
+            border-radius: var(--radius-lg);
+            padding: 24px;
             max-width: 1600px;
             margin: 0 auto;
+            border: 1px solid var(--ds-border);
+            box-shadow: 0 1px 2px rgba(9, 30, 66, 0.08);
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 0.5rem;
-            font-size: 0.9rem;
+            margin-top: 8px;
+            font-size: 14px;
         }
         th, td {
-            padding: 0.4rem 0.5rem;
+            padding: 12px 16px;
             text-align: left;
             vertical-align: top;
+            border-bottom: 1px solid var(--ds-border);
         }
         th {
-            border-bottom: 2px solid #ddd;
+            background: var(--ds-background-subtle);
             font-weight: 600;
+            color: var(--ds-text-subtle);
             cursor: pointer;
             user-select: none;
             position: relative;
-            padding-right: 1.5rem;
+            padding-right: 24px;
+            white-space: nowrap;
         }
         th:hover {
-            background-color: #f0f0f0;
+            background: var(--ds-border);
         }
         th.sortable::after {
             content: " ↕";
             position: absolute;
-            right: 0.3rem;
-            color: #999;
-            font-size: 0.8em;
+            right: 8px;
+            color: var(--ds-text-subtler);
+            font-size: 12px;
         }
         th.sort-asc::after {
             content: " ▲";
-            color: #333;
+            color: var(--ds-link);
         }
         th.sort-desc::after {
             content: " ▼";
-            color: #333;
+            color: var(--ds-link);
         }
-        tbody tr:nth-child(odd) {
-            background-color: #fafafa;
+        tbody tr:hover {
+            background: var(--ds-background-neutral);
         }
         .badge {
             display: inline-block;
-            padding: 0.15rem 0.5rem;
+            padding: 2px 10px;
             border-radius: 999px;
-            background: #e0e7ff;
-            font-size: 0.8rem;
+            background: var(--ds-accent-blue-subtle);
+            color: var(--ds-link);
+            font-size: 12px;
+            font-weight: 500;
         }
         .total {
             font-weight: 600;
-            margin-top: 0.25rem;
+            margin: 8px 0 0 0;
+            color: var(--ds-text-subtle);
         }
         .subtitle {
-            color: #555;
-            margin-top: 0;
-            margin-bottom: 1rem;
+            color: var(--ds-text-subtle);
+            margin: 0 0 8px 0;
         }
         .type-table-wrapper {
-            margin-top: 1rem;
+            margin-top: 16px;
         }
+        .type-table-wrapper table th { background: var(--ds-background-subtle); }
         .columns {
             display: flex;
-            gap: 1rem;
-            margin-top: 1.5rem;
+            gap: 16px;
+            margin-top: 24px;
         }
         .column {
             flex: 1;
             min-width: 30%;
-            background: #fafafa;
-            border-radius: 10px;
-            padding: 0.75rem;
-            border: 1px solid #e5e5e5;
-            max-height: 600px;
+            background: var(--ds-background-subtle);
+            border-radius: var(--radius);
+            padding: 16px;
+            border: 1px solid var(--ds-border);
+            max-height: 560px;
             overflow-y: auto;
         }
         .column h3 {
-            margin-top: 0;
-            margin-bottom: 0.5rem;
+            margin: 0 0 8px 0;
         }
-        /* Wider ID column and prevent wrapping */
         .column table th:first-child,
         .column table td:first-child {
-            width: 150px;
+            width: 140px;
             white-space: nowrap;
         }
-        /* Created date formatting */
         .created-date {
-            color: #666;
-            font-size: 0.85rem;
+            color: var(--ds-text-subtle);
+            font-size: 13px;
             white-space: nowrap;
         }
-        /* Modal styles */
         .modal-overlay {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(9, 30, 66, 0.54);
             z-index: 1000;
             justify-content: center;
             align-items: center;
         }
-        .modal-overlay.active {
-            display: flex;
-        }
+        .modal-overlay.active { display: flex; }
         .modal {
-            background: white;
-            border-radius: 12px;
-            padding: 2rem;
-            max-width: 900px;
-            max-height: 80vh;
+            background: var(--ds-background-default);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            max-width: 920px;
+            max-height: 85vh;
             width: 90%;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            border: 1px solid var(--ds-border-bold);
+            box-shadow: 0 8px 32px rgba(9, 30, 66, 0.25);
             display: flex;
             flex-direction: column;
         }
@@ -141,129 +169,91 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 2px solid #eee;
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--ds-border);
         }
-        .modal-header h2 {
-            margin: 0;
-        }
+        .modal-header h2 { margin: 0; font-size: 20px; }
         .modal-close {
             background: none;
             border: none;
-            font-size: 1.5rem;
+            font-size: 24px;
             cursor: pointer;
-            color: #666;
-            padding: 0;
-            width: 30px;
-            height: 30px;
+            color: var(--ds-text-subtle);
+            padding: 4px;
+            width: 32px;
+            height: 32px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 4px;
+            border-radius: var(--radius);
         }
         .modal-close:hover {
-            background: #f0f0f0;
-            color: #000;
+            background: var(--ds-background-neutral);
+            color: var(--ds-text);
         }
-        .modal-content {
-            overflow-y: auto;
-            flex: 1;
-        }
-        .modal-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
+        .modal-content { overflow-y: auto; flex: 1; }
+        .modal-table { width: 100%; border-collapse: collapse; }
         .modal-table th {
             position: sticky;
             top: 0;
-            background: white;
-            padding: 0.75rem;
-            text-align: left;
-            border-bottom: 2px solid #ddd;
+            background: var(--ds-background-subtle);
+            padding: 12px 16px;
+            border-bottom: 2px solid var(--ds-border);
             font-weight: 600;
+            color: var(--ds-text-subtle);
             z-index: 10;
             cursor: pointer;
-            user-select: none;
-            position: relative;
-            padding-right: 1.5rem;
         }
-        .modal-table th:hover {
-            background-color: #f0f0f0;
-        }
-        .modal-table th.sortable::after {
-            content: " ↕";
-            position: absolute;
-            right: 0.3rem;
-            color: #999;
-            font-size: 0.8em;
-        }
-        .modal-table th.sort-asc::after {
-            content: " ▲";
-            color: #333;
-        }
-        .modal-table th.sort-desc::after {
-            content: " ▼";
-            color: #333;
-        }
+        .modal-table th:hover { background: var(--ds-border); }
+        .modal-table th.sortable::after { content: " ↕"; position: absolute; right: 8px; color: var(--ds-text-subtler); font-size: 12px; }
+        .modal-table th.sort-asc::after { content: " ▲"; color: var(--ds-link); }
+        .modal-table th.sort-desc::after { content: " ▼"; color: var(--ds-link); }
         .modal-filter {
             width: 100%;
-            padding: 0.4rem;
-            margin-bottom: 0.5rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 0.9rem;
+            padding: 8px 12px;
+            margin-bottom: 4px;
+            border: 1px solid var(--ds-border);
+            border-radius: var(--radius);
+            font-size: 14px;
         }
         .modal-filter:focus {
             outline: none;
-            border-color: #0065ff;
-            box-shadow: 0 0 0 2px rgba(0, 101, 255, 0.1);
+            border-color: var(--ds-link);
+            box-shadow: 0 0 0 2px rgba(0, 82, 204, 0.2);
         }
         .filter-row {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid #eee;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 8px;
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--ds-border);
         }
-        .modal-table td {
-            padding: 0.75rem;
-            border-bottom: 1px solid #eee;
-        }
-        .modal-table tbody tr:hover {
-            background-color: #f5f5f5;
-        }
+        .modal-table td { padding: 12px 16px; border-bottom: 1px solid var(--ds-border); }
+        .modal-table tbody tr:hover { background: var(--ds-background-neutral); }
         .modal-table .issue-id {
             font-weight: 600;
-            color: #0065ff;
+            color: var(--ds-link);
             cursor: pointer;
-            text-decoration: underline;
+            text-decoration: none;
         }
-        .modal-table .issue-id:hover {
-            color: #0052cc;
-        }
-        .unlinked-count.clickable {
-            cursor: pointer;
-            text-decoration: underline;
-        }
-        .unlinked-count.clickable:hover {
-            color: #b91c1c !important;
-        }
+        .modal-table .issue-id:hover { color: var(--ds-link-hover); text-decoration: underline; }
+        .unlinked-count.clickable { cursor: pointer; text-decoration: underline; }
+        .unlinked-count.clickable:hover { color: var(--ds-danger) !important; }
         .issue-type-clickable {
             cursor: pointer;
-            transition: all 0.2s;
+            transition: background 0.15s ease;
         }
         .issue-type-clickable:hover {
-            background-color: #e0e7ff;
-            padding: 0.1rem 0.3rem;
-            border-radius: 4px;
+            background: var(--ds-accent-blue-subtle);
+            padding: 2px 6px;
+            border-radius: var(--radius);
         }
-        .loading {
-            text-align: center;
-            padding: 2rem;
-            color: #666;
-        }
+        .loading { text-align: center; padding: 32px; color: var(--ds-text-subtle); }
+        .link-danger { color: var(--ds-danger); font-weight: 600; text-decoration: underline; cursor: pointer; }
+        .link-danger:hover { color: #BF2600; }
+        .status-ok { color: var(--ds-success); }
     </style>
 </head>
 <body>
@@ -320,51 +310,45 @@
 
     {% if quality_analysis %}
     <div class="type-table-wrapper" style="margin-top: 2rem;">
-        <h2>Analiza jakości danych</h2>
+        <h2>Data quality</h2>
         <table>
             <thead>
             <tr>
-                <th>Typ analizy</th>
-                <th>Ilość</th>
-                <th>Procent</th>
+                <th>Analysis type</th>
+                <th>Count</th>
+                <th>%</th>
             </tr>
             </thead>
             <tbody>
             <tr>
-                <td>Issues z Start Date w przeszłości (Status: OPEN)</td>
+                <td>Issues with Start Date in the past (Status: OPEN)</td>
                 <td>
                     {% if quality_analysis.past_start_open.count > 0 %}
-                    <a href="/quality/past-start-open" style="color: #dc2626; font-weight: 600; text-decoration: underline; cursor: pointer;">
-                        {{ quality_analysis.past_start_open.count }}
-                    </a>
+                    <a href="/quality/past-start-open" class="link-danger">{{ quality_analysis.past_start_open.count }}</a>
                     {% else %}
-                    <span style="color: #16a34a;">0</span>
+                    <span class="status-ok">0</span>
                     {% endif %}
                 </td>
                 <td>{{ "%.1f"|format(quality_analysis.past_start_open.percentage) }}%</td>
             </tr>
             <tr>
-                <td>Issues In Progress bez Assignee</td>
+                <td>Issues In Progress without Assignee</td>
                 <td>
                     {% if quality_analysis.in_progress_no_assignee.count > 0 %}
-                    <a href="/quality/in-progress-no-assignee" style="color: #dc2626; font-weight: 600; text-decoration: underline; cursor: pointer;">
-                        {{ quality_analysis.in_progress_no_assignee.count }}
-                    </a>
+                    <a href="/quality/in-progress-no-assignee" class="link-danger">{{ quality_analysis.in_progress_no_assignee.count }}</a>
                     {% else %}
-                    <span style="color: #16a34a;">0</span>
+                    <span class="status-ok">0</span>
                     {% endif %}
                 </td>
                 <td>{{ "%.1f"|format(quality_analysis.in_progress_no_assignee.percentage) }}%</td>
             </tr>
             <tr>
-                <td>Ilość obiektów (Epików, Inicjatyw, Stories) ze statusem Waiting for release</td>
+                <td>Epics, Initiatives, Stories with status Waiting for release</td>
                 <td>
                     {% if quality_analysis.waiting_for_release.count > 0 %}
-                    <a href="#" id="waitingForReleaseCount" style="color: #dc2626; font-weight: 600; text-decoration: underline; cursor: pointer;">
-                        {{ quality_analysis.waiting_for_release.count }}
-                    </a>
+                    <a href="#" id="waitingForReleaseCount" class="link-danger">{{ quality_analysis.waiting_for_release.count }}</a>
                     {% else %}
-                    <span style="color: #16a34a;">0</span>
+                    <span class="status-ok">0</span>
                     {% endif %}
                 </td>
                 <td>{{ "%.1f"|format(quality_analysis.waiting_for_release.percentage) }}%</td>
@@ -467,7 +451,7 @@
 <script>
 const JIRA_URL = {% if jira_url %}{{ jira_url|tojson }}{% else %}null{% endif %};
 (function() {
-    // Funkcja sortowania tabeli
+    // Table sort handler
     function sortTable(table, columnIndex, ascending) {
         const tbody = table.querySelector('tbody');
         const rows = Array.from(tbody.querySelectorAll('tr'));
@@ -481,7 +465,7 @@ const JIRA_URL = {% if jira_url %}{{ jira_url|tojson }}{% else %}null{% endif %}
             let aCompare = aValue;
             let bCompare = bValue;
             
-            // Jeśli kolumna ID (index 0), spróbuj wyciągnąć numer z klucza (np. "ONE-123" -> 123)
+            // If ID column, extract numeric part for sort (e.g. "ONE-123" -> 123)
             if (columnIndex === 0) {
                 const aMatch = aValue.match(/-(\d+)$/);
                 const bMatch = bValue.match(/-(\d+)$/);
@@ -491,18 +475,16 @@ const JIRA_URL = {% if jira_url %}{{ jira_url|tojson }}{% else %}null{% endif %}
                     if (aNum !== bNum) {
                         return ascending ? aNum - bNum : bNum - aNum;
                     }
-                    // Jeśli numery są równe, sortuj alfabetycznie po całym kluczu
                 }
-                // Jeśli format nie pasuje, sortuj alfabetycznie
             }
             
-            // Sortowanie tekstowe (case-insensitive)
+            // Text comparison (case-insensitive)
             if (typeof aCompare === 'string' && typeof bCompare === 'string') {
                 aCompare = aCompare.toLowerCase();
                 bCompare = bCompare.toLowerCase();
             }
             
-            // Porównanie wartości
+            // Compare values
             if (aCompare < bCompare) {
                 return ascending ? -1 : 1;
             }
@@ -512,14 +494,10 @@ const JIRA_URL = {% if jira_url %}{{ jira_url|tojson }}{% else %}null{% endif %}
             return 0;
         });
         
-        // Usuń wszystkie wiersze z tbody
         rows.forEach(row => tbody.removeChild(row));
-        
-        // Dodaj posortowane wiersze z powrotem
         rows.forEach(row => tbody.appendChild(row));
     }
     
-    // Funkcja do obsługi kliknięcia w nagłówek
     function handleHeaderClick(event) {
         const th = event.target.closest('th.sortable');
         if (!th) return;
@@ -716,6 +694,7 @@ function renderWaitingForReleaseTable(issues) {
             <input type="text" class="modal-filter" id="filter-type" placeholder="Filter Typ..." onkeyup="filterModalTable()">
             <input type="text" class="modal-filter" id="filter-summary" placeholder="Filter Summary..." onkeyup="filterModalTable()">
             <input type="text" class="modal-filter" id="filter-status-since" placeholder="Filter Od kiedy..." onkeyup="filterModalTable()">
+            <input type="text" class="modal-filter" id="filter-days" placeholder="Filter Dni..." onkeyup="filterModalTable()">
         </div>
         <table class="modal-table" id="modalTable">
             <thead>
@@ -724,6 +703,7 @@ function renderWaitingForReleaseTable(issues) {
                     <th class="sortable" data-column="issue_type" onclick="sortModalTable('issue_type')">Typ</th>
                     <th class="sortable" data-column="summary" onclick="sortModalTable('summary')">Summary</th>
                     <th class="sortable" data-column="status_since" onclick="sortModalTable('status_since')">Od kiedy</th>
+                    <th class="sortable" data-column="days_in_status" onclick="sortModalTable('days_in_status')">Dni w statusie</th>
                 </tr>
             </thead>
             <tbody id="modalTableBody">
@@ -732,6 +712,9 @@ function renderWaitingForReleaseTable(issues) {
     issues.forEach(issue => {
         const jiraLink = JIRA_URL ? `${JIRA_URL}/browse/${issue.key}` : '#';
         const statusSince = issue.status_since != null && issue.status_since !== '' ? issue.status_since : '—';
+        const daysInStatus = issue.days_in_status != null && issue.days_in_status !== '' ? Number(issue.days_in_status) : null;
+        const daysDisplay = daysInStatus !== null ? String(daysInStatus) : '—';
+        const daysSortValue = daysInStatus !== null ? String(daysInStatus).padStart(8, '0') : '99999999';
         html += `
             <tr>
                 <td data-value="${escapeHtml(issue.key)}">
@@ -742,6 +725,7 @@ function renderWaitingForReleaseTable(issues) {
                 <td data-value="${escapeHtml((issue.issue_type || '').toLowerCase())}">${escapeHtml(issue.issue_type || '')}</td>
                 <td data-value="${escapeHtml((issue.summary || '').toLowerCase())}">${escapeHtml(issue.summary || '')}</td>
                 <td data-value="${escapeHtml(String(statusSince).toLowerCase())}">${escapeHtml(statusSince)}</td>
+                <td data-value="${daysSortValue}">${escapeHtml(daysDisplay)}</td>
             </tr>
         `;
     });

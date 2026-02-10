@@ -2,6 +2,7 @@ import json
 import os
 from collections import Counter
 from datetime import datetime
+from urllib.parse import quote
 from dotenv import load_dotenv
 from functools import lru_cache
 
@@ -269,29 +270,27 @@ def get_unlinked_issues(issues, issue_type):
 
 
 def is_date_string(value):
-    """Sprawdza czy string wygląda jak data."""
+    """Returns True if the string looks like a date."""
     if not isinstance(value, str) or not value:
         return False
     
-    # Usuń timezone info dla parsowania
+    # Strip timezone info for parsing
     value_clean = value.replace("Z", "").replace("+00:00", "")
     if "+" in value_clean:
         value_clean = value_clean.split("+")[0]
     if "-" in value_clean and len(value_clean) > 10:
-        # Może być timezone offset, usuń go
+        # May have timezone offset, strip it
         parts = value_clean.split("-")
         if len(parts) > 3:
             value_clean = "-".join(parts[:3])
     
-    # Sprawdź czy zaczyna się od YYYY-MM-DD
+    # Check if it starts with YYYY-MM-DD
     if len(value_clean) >= 10:
         try:
-            # Spróbuj sparsować jako ISO format
             datetime.fromisoformat(value_clean[:19] if len(value_clean) >= 19 else value_clean[:10])
             return True
         except (ValueError, AttributeError):
             try:
-                # Spróbuj tylko datę
                 datetime.fromisoformat(value_clean[:10])
                 return True
             except (ValueError, AttributeError):
@@ -301,43 +300,40 @@ def is_date_string(value):
 
 
 def find_date_fields(issue):
-    """Znajduje pola dat w issue (start date, end date)."""
+    """Finds date fields in issue (start date, end date)."""
     fields = issue.get("fields", {})
     
     start_date = None
     end_date = None
     
-    # Standardowe pola JIRA
+    # Standard JIRA fields
     if "duedate" in fields and fields["duedate"]:
         end_date = fields["duedate"]
     
-    # Pobierz wszystkie customfield_* które są datami
+    # Collect all customfield_* that look like dates
     date_fields = []
     for key, value in fields.items():
         if key.startswith("customfield_") and value is not None:
             if is_date_string(value):
                 date_fields.append((key, value))
     
-    # Jeśli mamy pola dat, spróbuj zidentyfikować start i end
+    # If we have date fields, identify start and end
     if len(date_fields) >= 2:
-        # Posortuj według ID pola (mniejsze ID = prawdopodobnie start date)
         try:
             sorted_fields = sorted(date_fields, key=lambda x: int(x[0].replace("customfield_", "")))
             start_date = sorted_fields[0][1]
             end_date = sorted_fields[1][1]
         except ValueError:
-            # Jeśli nie można sparsować ID, użyj pierwszej jako start, drugiej jako end
             start_date = date_fields[0][1]
             end_date = date_fields[1][1]
     elif len(date_fields) == 1:
-        # Tylko jedno pole daty - może to być end date
         end_date = date_fields[0][1]
     
     return start_date, end_date
 
 
 def parse_date(date_str):
-    """Parsuje datę z różnych formatów."""
+    """Parses date from various formats."""
     if not date_str:
         return None
     
@@ -351,9 +347,9 @@ def parse_date(date_str):
 
 
 def is_open_status(status_name):
-    """Sprawdza czy status jest otwarty (nie zamknięty)."""
+    """Returns True if status is open (not closed)."""
     if not status_name:
-        return True  # Jeśli brak statusu, traktuj jako otwarty
+        return True
     
     closed_statuses = ["done", "closed", "resolved", "cancelled", "rejected", "completed"]
     status_lower = status_name.lower().strip()
@@ -361,7 +357,7 @@ def is_open_status(status_name):
 
 
 def get_issues_with_past_start_date_open(issues):
-    """Znajduje issues gdzie start date jest w przeszłości i status to dokładnie OPEN (bez Waiting for release itp.)."""
+    """Finds issues where start date is in the past and status is exactly OPEN (excludes Waiting for release, In Progress, etc.)."""
     result = []
     today = datetime.now()
     
@@ -369,7 +365,7 @@ def get_issues_with_past_start_date_open(issues):
         fields = issue.get("fields", {})
         status = fields.get("status", {}).get("name", "")
         
-        # Tylko status "Open" — wykluczamy np. "Waiting for release", "In Progress" itd.
+        # Only status "Open" — exclude e.g. Waiting for release, In Progress
         if not status or status.strip().lower() != "open":
             continue
         
@@ -399,15 +395,15 @@ def get_issues_with_past_start_date_open(issues):
 
 def _get_status_since_from_changelog(issue, status_name):
     """
-    Z changelogu issue wyciąga datę ostatniego przejścia do podanego statusu (np. 'Waiting for release').
-    Zwraca napis YYYY-MM-DD lub None, jeśli brak changelogu / brak takiej zmiany.
+    Extracts from issue changelog the date of the last transition to the given status (e.g. 'Waiting for release').
+    Returns YYYY-MM-DD string or None if no changelog or no such change.
     """
     changelog = issue.get("changelog") or {}
     histories = changelog.get("histories") or []
     status_lower = (status_name or "").strip().lower()
     if not status_lower:
         return None
-    for h in reversed(histories):  # od najstarszych; ostatnie dopasowanie = ostatnia zmiana do tego statusu
+    for h in reversed(histories):
         created_raw = h.get("created") or ""
         items = h.get("items") or []
         for item in items:
@@ -423,29 +419,67 @@ def _get_status_since_from_changelog(issue, status_name):
     return None
 
 
+def _parse_created_to_date_str(created):
+    """From created (int timestamp or ISO string) returns (timestamp_for_compare, YYYY-MM-DD)."""
+    if created is None:
+        return None, None
+    if isinstance(created, (int, float)):
+        ts = int(created) // 1000 if created > 1e10 else int(created)
+        try:
+            dt = datetime.utcfromtimestamp(ts)
+            return ts, dt.strftime("%Y-%m-%d")
+        except (ValueError, OSError):
+            return None, None
+    s = str(created)
+    date_str = s.split("T")[0] if "T" in s else s[:10]
+    try:
+        ts = int(datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp())
+    except (ValueError, TypeError):
+        ts = 0
+    return ts, date_str
+
+
+def _extract_status_since_from_histories(histories, status_lower):
+    """From changelog entries (histories or values) returns the date of the latest transition to the given status."""
+    best_ts, best_date = None, None
+    for h in (histories or []):
+        created = h.get("created")
+        ts, date_str = _parse_created_to_date_str(created)
+        if date_str is None:
+            continue
+        for item in (h.get("items") or []):
+            if (item.get("field") or "").strip().lower() != "status":
+                continue
+            to_val = item.get("toString") or item.get("to")
+            if isinstance(to_val, dict):
+                to_val = to_val.get("name") or to_val.get("value") or ""
+            if (str(to_val or "").strip().lower()) != status_lower:
+                continue
+            if best_ts is None or ts > best_ts:
+                best_ts, best_date = ts, date_str
+    return best_date
+
+
 def _fetch_changelog_status_since(issue_keys, id_to_key, target_status="Waiting for release"):
     """
-    Wywołuje Jira API POST /rest/api/3/changelog/bulkfetch i zwraca mapę issue_key -> data (YYYY-MM-DD)
-    od kiedy status ustawiono na target_status (np. 'Waiting for release').
+    Calls Jira API POST /rest/api/3/changelog/bulkfetch and returns map issue_key -> date (YYYY-MM-DD).
+    If bulkfetch returns no data, falls back to GET /rest/api/3/issue/{key}/changelog per issue.
     """
     if not issue_keys or not JIRA_URL or not JIRA_EMAIL or not JIRA_TOKEN:
         return {}
-    url = f"{JIRA_URL.rstrip('/')}/rest/api/3/changelog/bulkfetch"
     status_lower = (target_status or "").strip().lower()
-    # Zbieramy najnowszą datę zmiany na target_status per issue (po issueId z odpowiedzi)
-    latest_by_issue_id = {}  # issueId -> (created_ts, date_str)
+    result_map = {}
 
+    # 1. Try bulkfetch
+    url_bulk = f"{JIRA_URL.rstrip('/')}/rest/api/3/changelog/bulkfetch"
     next_page_token = None
-    for _ in range(100):  # limit stron
-        payload = {
-            "issueIdsOrKeys": issue_keys,
-            "maxResults": 500,
-        }
+    for _ in range(100):
+        payload = {"issueIdsOrKeys": issue_keys, "maxResults": 500}
         if next_page_token:
             payload["nextPageToken"] = next_page_token
         try:
             resp = requests.post(
-                url,
+                url_bulk,
                 json=payload,
                 auth=(JIRA_EMAIL, JIRA_TOKEN),
                 headers={"Accept": "application/json", "Content-Type": "application/json"},
@@ -453,54 +487,60 @@ def _fetch_changelog_status_since(issue_keys, id_to_key, target_status="Waiting 
                 timeout=60,
             )
         except requests.RequestException:
-            return {}
+            break
         if resp.status_code != 200:
-            return {}
+            break
         data = resp.json() or {}
         for log in data.get("issueChangeLogs") or []:
             issue_id = str(log.get("issueId") or "")
-            for hist in log.get("changeHistories") or []:
-                created = hist.get("created")
-                if created is None:
-                    continue
-                # created może być Unix timestamp (s) lub ISO string
-                if isinstance(created, (int, float)):
-                    try:
-                        dt = datetime.utcfromtimestamp(int(created) if created > 1e10 else int(created))
-                        date_str = dt.strftime("%Y-%m-%d")
-                    except (ValueError, OSError):
-                        continue
-                else:
-                    created_str = str(created)
-                    date_str = created_str.split("T")[0] if "T" in created_str else created_str[:10]
-                for item in hist.get("items") or []:
-                    if (item.get("field") or "").strip().lower() != "status":
-                        continue
-                    to_val = item.get("toString") or item.get("to")
-                    if isinstance(to_val, dict):
-                        to_val = to_val.get("name") or to_val.get("value") or ""
-                    if (str(to_val or "").strip().lower()) != status_lower:
-                        continue
-                    # Zachowujemy najnowszą datę dla tego issue (większy ts = nowszy)
-                    if isinstance(created, (int, float)):
-                        ts_compare = int(created) // 1000 if created > 1e10 else int(created)  # ms vs s
-                    else:
-                        try:
-                            ts_compare = int(datetime.fromisoformat(str(created).replace("Z", "+00:00")).timestamp())
-                        except (ValueError, TypeError):
-                            ts_compare = 0
-                    if issue_id not in latest_by_issue_id or ts_compare > latest_by_issue_id[issue_id][0]:
-                        latest_by_issue_id[issue_id] = (ts_compare, date_str)
+            key = id_to_key.get(issue_id)
+            if not key:
+                continue
+            histories = log.get("changeHistories") or log.get("values") or []
+            date_str = _extract_status_since_from_histories(histories, status_lower)
+            if date_str and (key not in result_map or date_str > result_map[key]):
+                result_map[key] = date_str
         next_page_token = data.get("nextPageToken")
         if not next_page_token:
             break
-    return {id_to_key[uid]: date_str for uid, (_, date_str) in latest_by_issue_id.items() if uid in id_to_key}
+
+    # 2. Fallback: GET changelog per issue for those without date (with pagination if needed)
+    missing = [k for k in issue_keys if k not in result_map]
+    for key in missing:
+        all_histories = []
+        start_at = 0
+        max_results = 100
+        for _ in range(50):
+            url_get = f"{JIRA_URL.rstrip('/')}/rest/api/3/issue/{quote(key)}/changelog?startAt={start_at}&maxResults={max_results}"
+            try:
+                r = requests.get(
+                    url_get,
+                    auth=(JIRA_EMAIL, JIRA_TOKEN),
+                    headers={"Accept": "application/json"},
+                    verify=VERIFY_SSL,
+                    timeout=30,
+                )
+            except requests.RequestException:
+                break
+            if r.status_code != 200:
+                break
+            data = r.json() or {}
+            page = data.get("values") or data.get("histories") or []
+            all_histories.extend(page)
+            total = data.get("total", 0)
+            if start_at + len(page) >= total or len(page) < max_results:
+                break
+            start_at += len(page)
+        date_str = _extract_status_since_from_histories(all_histories, status_lower)
+        if date_str:
+            result_map[key] = date_str
+    return result_map
 
 
 def get_issues_waiting_for_release(issues):
     """
-    Znajduje Epiki, Inicjatywy i Stories ze statusem 'Waiting for release'.
-    Zwraca listę słowników z key, summary, issue_type, status, status_since (od kiedy ten status), id (do mapowania API).
+    Finds Epics, Initiatives and Stories with status 'Waiting for release'.
+    Returns list of dicts with key, summary, issue_type, status, status_since, id (for API mapping).
     """
     allowed_types = {"epic", "initiative", "story"}
     target_status = "Waiting for release"
@@ -528,20 +568,19 @@ def get_issues_waiting_for_release(issues):
 
 
 def get_in_progress_issues_without_assignee(issues):
-    """Znajduje issues ze statusem In Progress bez assignee."""
+    """Finds issues with status In Progress and no assignee."""
     result = []
     
     for issue in issues:
         fields = issue.get("fields", {})
         status = fields.get("status", {}).get("name", "")
         
-        # Sprawdź czy status to "In Progress" (case insensitive)
         if status.lower() not in ["in progress", "inprogress"]:
             continue
         
         assignee = fields.get("assignee")
         if assignee:
-            continue  # Ma assignee, pomiń
+            continue
         
         key = issue.get("key", "")
         summary = fields.get("summary", "")
@@ -563,7 +602,7 @@ def get_in_progress_issues_without_assignee(issues):
 
 
 def get_quality_analysis(issues):
-    """Wykonuje analizę jakości danych i zwraca wyniki."""
+    """Runs data quality analysis and returns results."""
     global _quality_analysis_cache
     
     if _quality_analysis_cache is not None:
@@ -706,7 +745,7 @@ def get_in_progress_no_assignee_api():
 def get_waiting_for_release_api():
     """
     API endpoint returning Epics, Initiatives, Stories with status Waiting for release.
-    Pobiera z Jira changelog, żeby uzupełnić status_since (od kiedy status = Waiting for release).
+    Fetches Jira changelog to fill status_since (when status became Waiting for release).
     """
     issues = load_issues()
     result = get_issues_waiting_for_release(issues)
@@ -722,6 +761,19 @@ def get_waiting_for_release_api():
     else:
         for item in result:
             item.pop("id", None)
+
+    # Compute days in status (from status_since to today)
+    today = datetime.now().date()
+    for item in result:
+        since = item.get("status_since")
+        if since and isinstance(since, str) and len(since) >= 10:
+            try:
+                d = datetime.strptime(since[:10], "%Y-%m-%d").date()
+                item["days_in_status"] = (today - d).days
+            except (ValueError, TypeError):
+                item["days_in_status"] = None
+        else:
+            item["days_in_status"] = None
 
     return jsonify({
         "analysis_type": "waiting_for_release",
@@ -739,10 +791,10 @@ def quality_analysis_page(analysis_type):
     
     if analysis_type == "past-start-open":
         result = get_issues_with_past_start_date_open(issues)
-        title = "Issues z Start Date w przeszłości (Status: OPEN)"
+        title = "Issues with Start Date in the past (Status: OPEN)"
     elif analysis_type == "in-progress-no-assignee":
         result = get_in_progress_issues_without_assignee(issues)
-        title = "Issues In Progress bez Assignee"
+        title = "Issues In Progress without Assignee"
     else:
         abort(404)
     
