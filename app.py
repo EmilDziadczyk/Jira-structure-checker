@@ -5,6 +5,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from functools import lru_cache
 
+import requests
 from flask import Flask, render_template, abort, jsonify
 
 load_dotenv()
@@ -13,6 +14,9 @@ app = Flask(__name__)
 
 DATA_FILE = "jira_issues_raw.json"  # or "jira_issues.json" if you renamed it
 JIRA_URL = os.getenv("JIRA_URL", "")
+JIRA_EMAIL = os.getenv("JIRA_EMAIL", "")
+JIRA_TOKEN = os.getenv("JIRA_TOKEN", "")
+VERIFY_SSL = os.getenv("VERIFY_SSL", "false").lower() in ("true", "1", "yes")
 
 # Data cache
 _issues_cache = None
@@ -419,10 +423,84 @@ def _get_status_since_from_changelog(issue, status_name):
     return None
 
 
+def _fetch_changelog_status_since(issue_keys, id_to_key, target_status="Waiting for release"):
+    """
+    Wywołuje Jira API POST /rest/api/3/changelog/bulkfetch i zwraca mapę issue_key -> data (YYYY-MM-DD)
+    od kiedy status ustawiono na target_status (np. 'Waiting for release').
+    """
+    if not issue_keys or not JIRA_URL or not JIRA_EMAIL or not JIRA_TOKEN:
+        return {}
+    url = f"{JIRA_URL.rstrip('/')}/rest/api/3/changelog/bulkfetch"
+    status_lower = (target_status or "").strip().lower()
+    # Zbieramy najnowszą datę zmiany na target_status per issue (po issueId z odpowiedzi)
+    latest_by_issue_id = {}  # issueId -> (created_ts, date_str)
+
+    next_page_token = None
+    for _ in range(100):  # limit stron
+        payload = {
+            "issueIdsOrKeys": issue_keys,
+            "maxResults": 500,
+        }
+        if next_page_token:
+            payload["nextPageToken"] = next_page_token
+        try:
+            resp = requests.post(
+                url,
+                json=payload,
+                auth=(JIRA_EMAIL, JIRA_TOKEN),
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+                verify=VERIFY_SSL,
+                timeout=60,
+            )
+        except requests.RequestException:
+            return {}
+        if resp.status_code != 200:
+            return {}
+        data = resp.json() or {}
+        for log in data.get("issueChangeLogs") or []:
+            issue_id = str(log.get("issueId") or "")
+            for hist in log.get("changeHistories") or []:
+                created = hist.get("created")
+                if created is None:
+                    continue
+                # created może być Unix timestamp (s) lub ISO string
+                if isinstance(created, (int, float)):
+                    try:
+                        dt = datetime.utcfromtimestamp(int(created) if created > 1e10 else int(created))
+                        date_str = dt.strftime("%Y-%m-%d")
+                    except (ValueError, OSError):
+                        continue
+                else:
+                    created_str = str(created)
+                    date_str = created_str.split("T")[0] if "T" in created_str else created_str[:10]
+                for item in hist.get("items") or []:
+                    if (item.get("field") or "").strip().lower() != "status":
+                        continue
+                    to_val = item.get("toString") or item.get("to")
+                    if isinstance(to_val, dict):
+                        to_val = to_val.get("name") or to_val.get("value") or ""
+                    if (str(to_val or "").strip().lower()) != status_lower:
+                        continue
+                    # Zachowujemy najnowszą datę dla tego issue (większy ts = nowszy)
+                    if isinstance(created, (int, float)):
+                        ts_compare = int(created) // 1000 if created > 1e10 else int(created)  # ms vs s
+                    else:
+                        try:
+                            ts_compare = int(datetime.fromisoformat(str(created).replace("Z", "+00:00")).timestamp())
+                        except (ValueError, TypeError):
+                            ts_compare = 0
+                    if issue_id not in latest_by_issue_id or ts_compare > latest_by_issue_id[issue_id][0]:
+                        latest_by_issue_id[issue_id] = (ts_compare, date_str)
+        next_page_token = data.get("nextPageToken")
+        if not next_page_token:
+            break
+    return {id_to_key[uid]: date_str for uid, (_, date_str) in latest_by_issue_id.items() if uid in id_to_key}
+
+
 def get_issues_waiting_for_release(issues):
     """
     Znajduje Epiki, Inicjatywy i Stories ze statusem 'Waiting for release'.
-    Zwraca listę słowników z key, summary, issue_type, status, status_since (od kiedy ten status).
+    Zwraca listę słowników z key, summary, issue_type, status, status_since (od kiedy ten status), id (do mapowania API).
     """
     allowed_types = {"epic", "initiative", "story"}
     target_status = "Waiting for release"
@@ -444,6 +522,7 @@ def get_issues_waiting_for_release(issues):
             "issue_type": issue_type,
             "status": status,
             "status_since": status_since,
+            "id": str(issue.get("id", "")),
         })
     return result
 
@@ -627,10 +706,23 @@ def get_in_progress_no_assignee_api():
 def get_waiting_for_release_api():
     """
     API endpoint returning Epics, Initiatives, Stories with status Waiting for release.
+    Pobiera z Jira changelog, żeby uzupełnić status_since (od kiedy status = Waiting for release).
     """
     issues = load_issues()
     result = get_issues_waiting_for_release(issues)
-    
+
+    if result and JIRA_URL and JIRA_EMAIL and JIRA_TOKEN:
+        id_to_key = {item["id"]: item["key"] for item in result if item.get("id")}
+        keys = [item["key"] for item in result]
+        status_since_map = _fetch_changelog_status_since(keys, id_to_key)
+        for item in result:
+            item["status_since"] = status_since_map.get(item["key"]) or item.get("status_since")
+        for item in result:
+            item.pop("id", None)
+    else:
+        for item in result:
+            item.pop("id", None)
+
     return jsonify({
         "analysis_type": "waiting_for_release",
         "count": len(result),
