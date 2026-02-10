@@ -318,6 +318,62 @@
         </table>
     </div>
 
+    {% if quality_analysis %}
+    <div class="type-table-wrapper" style="margin-top: 2rem;">
+        <h2>Analiza jakości danych</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Typ analizy</th>
+                <th>Ilość</th>
+                <th>Procent</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>Issues z Start Date w przeszłości (Status: OPEN)</td>
+                <td>
+                    {% if quality_analysis.past_start_open.count > 0 %}
+                    <a href="/quality/past-start-open" style="color: #dc2626; font-weight: 600; text-decoration: underline; cursor: pointer;">
+                        {{ quality_analysis.past_start_open.count }}
+                    </a>
+                    {% else %}
+                    <span style="color: #16a34a;">0</span>
+                    {% endif %}
+                </td>
+                <td>{{ "%.1f"|format(quality_analysis.past_start_open.percentage) }}%</td>
+            </tr>
+            <tr>
+                <td>Issues In Progress bez Assignee</td>
+                <td>
+                    {% if quality_analysis.in_progress_no_assignee.count > 0 %}
+                    <a href="/quality/in-progress-no-assignee" style="color: #dc2626; font-weight: 600; text-decoration: underline; cursor: pointer;">
+                        {{ quality_analysis.in_progress_no_assignee.count }}
+                    </a>
+                    {% else %}
+                    <span style="color: #16a34a;">0</span>
+                    {% endif %}
+                </td>
+                <td>{{ "%.1f"|format(quality_analysis.in_progress_no_assignee.percentage) }}%</td>
+            </tr>
+            <tr>
+                <td>Ilość obiektów (Epików, Inicjatyw, Stories) ze statusem Waiting for release</td>
+                <td>
+                    {% if quality_analysis.waiting_for_release.count > 0 %}
+                    <a href="#" id="waitingForReleaseCount" style="color: #dc2626; font-weight: 600; text-decoration: underline; cursor: pointer;">
+                        {{ quality_analysis.waiting_for_release.count }}
+                    </a>
+                    {% else %}
+                    <span style="color: #16a34a;">0</span>
+                    {% endif %}
+                </td>
+                <td>{{ "%.1f"|format(quality_analysis.waiting_for_release.percentage) }}%</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
     <div class="columns">
 
         <!-- EPICS -->

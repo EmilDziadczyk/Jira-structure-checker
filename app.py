@@ -1,6 +1,7 @@
 import json
 import os
 from collections import Counter
+from datetime import datetime
 from dotenv import load_dotenv
 from functools import lru_cache
 
@@ -18,6 +19,7 @@ _issues_cache = None
 _file_mtime = None
 _unlinked_cache = {}  # Cache for get_unlinked_issues results: {issue_type: result}
 _all_by_type_cache = {}  # Cache for get_all_issues_by_type results: {issue_type: result}
+_quality_analysis_cache = None  # Cache for quality analysis results
 
 
 def load_issues():
@@ -41,6 +43,8 @@ def load_issues():
         # Clear function result cache when data changes
         _unlinked_cache.clear()
         _all_by_type_cache.clear()
+        global _quality_analysis_cache
+        _quality_analysis_cache = None
     
     return _issues_cache
 
@@ -260,6 +264,263 @@ def get_unlinked_issues(issues, issue_type):
     return result
 
 
+def is_date_string(value):
+    """Sprawdza czy string wygląda jak data."""
+    if not isinstance(value, str) or not value:
+        return False
+    
+    # Usuń timezone info dla parsowania
+    value_clean = value.replace("Z", "").replace("+00:00", "")
+    if "+" in value_clean:
+        value_clean = value_clean.split("+")[0]
+    if "-" in value_clean and len(value_clean) > 10:
+        # Może być timezone offset, usuń go
+        parts = value_clean.split("-")
+        if len(parts) > 3:
+            value_clean = "-".join(parts[:3])
+    
+    # Sprawdź czy zaczyna się od YYYY-MM-DD
+    if len(value_clean) >= 10:
+        try:
+            # Spróbuj sparsować jako ISO format
+            datetime.fromisoformat(value_clean[:19] if len(value_clean) >= 19 else value_clean[:10])
+            return True
+        except (ValueError, AttributeError):
+            try:
+                # Spróbuj tylko datę
+                datetime.fromisoformat(value_clean[:10])
+                return True
+            except (ValueError, AttributeError):
+                pass
+    
+    return False
+
+
+def find_date_fields(issue):
+    """Znajduje pola dat w issue (start date, end date)."""
+    fields = issue.get("fields", {})
+    
+    start_date = None
+    end_date = None
+    
+    # Standardowe pola JIRA
+    if "duedate" in fields and fields["duedate"]:
+        end_date = fields["duedate"]
+    
+    # Pobierz wszystkie customfield_* które są datami
+    date_fields = []
+    for key, value in fields.items():
+        if key.startswith("customfield_") and value is not None:
+            if is_date_string(value):
+                date_fields.append((key, value))
+    
+    # Jeśli mamy pola dat, spróbuj zidentyfikować start i end
+    if len(date_fields) >= 2:
+        # Posortuj według ID pola (mniejsze ID = prawdopodobnie start date)
+        try:
+            sorted_fields = sorted(date_fields, key=lambda x: int(x[0].replace("customfield_", "")))
+            start_date = sorted_fields[0][1]
+            end_date = sorted_fields[1][1]
+        except ValueError:
+            # Jeśli nie można sparsować ID, użyj pierwszej jako start, drugiej jako end
+            start_date = date_fields[0][1]
+            end_date = date_fields[1][1]
+    elif len(date_fields) == 1:
+        # Tylko jedno pole daty - może to być end date
+        end_date = date_fields[0][1]
+    
+    return start_date, end_date
+
+
+def parse_date(date_str):
+    """Parsuje datę z różnych formatów."""
+    if not date_str:
+        return None
+    
+    try:
+        if "T" in date_str:
+            return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        else:
+            return datetime.fromisoformat(date_str[:10])
+    except (ValueError, AttributeError):
+        return None
+
+
+def is_open_status(status_name):
+    """Sprawdza czy status jest otwarty (nie zamknięty)."""
+    if not status_name:
+        return True  # Jeśli brak statusu, traktuj jako otwarty
+    
+    closed_statuses = ["done", "closed", "resolved", "cancelled", "rejected", "completed"]
+    status_lower = status_name.lower().strip()
+    return status_lower not in closed_statuses
+
+
+def get_issues_with_past_start_date_open(issues):
+    """Znajduje issues gdzie start date jest w przeszłości i status to dokładnie OPEN (bez Waiting for release itp.)."""
+    result = []
+    today = datetime.now()
+    
+    for issue in issues:
+        fields = issue.get("fields", {})
+        status = fields.get("status", {}).get("name", "")
+        
+        # Tylko status "Open" — wykluczamy np. "Waiting for release", "In Progress" itd.
+        if not status or status.strip().lower() != "open":
+            continue
+        
+        start_date, _ = find_date_fields(issue)
+        if start_date:
+            start_dt = parse_date(start_date)
+            if start_dt and start_dt.date() < today.date():
+                key = issue.get("key", "")
+                summary = fields.get("summary", "")
+                created_raw = fields.get("created", "")
+                created_date = created_raw.split("T")[0] if created_raw else ""
+                
+                creator = fields.get("creator", {})
+                creator_name = creator.get("displayName", creator.get("emailAddress", "Unknown"))
+                
+                result.append({
+                    "key": key,
+                    "summary": summary,
+                    "created_date": created_date,
+                    "creator_name": creator_name,
+                    "start_date": start_date.split("T")[0] if "T" in start_date else start_date[:10],
+                    "status": status
+                })
+    
+    return result
+
+
+def _get_status_since_from_changelog(issue, status_name):
+    """
+    Z changelogu issue wyciąga datę ostatniego przejścia do podanego statusu (np. 'Waiting for release').
+    Zwraca napis YYYY-MM-DD lub None, jeśli brak changelogu / brak takiej zmiany.
+    """
+    changelog = issue.get("changelog") or {}
+    histories = changelog.get("histories") or []
+    status_lower = (status_name or "").strip().lower()
+    if not status_lower:
+        return None
+    for h in reversed(histories):  # od najstarszych; ostatnie dopasowanie = ostatnia zmiana do tego statusu
+        created_raw = h.get("created") or ""
+        items = h.get("items") or []
+        for item in items:
+            if (item.get("field") or "").lower() != "status":
+                continue
+            to_str = (item.get("toString") or item.get("to") or "")
+            if isinstance(to_str, dict):
+                to_str = to_str.get("name") or to_str.get("value") or ""
+            if (to_str or "").strip().lower() == status_lower:
+                if created_raw:
+                    return created_raw.split("T")[0] if "T" in created_raw else created_raw[:10]
+                return None
+    return None
+
+
+def get_issues_waiting_for_release(issues):
+    """
+    Znajduje Epiki, Inicjatywy i Stories ze statusem 'Waiting for release'.
+    Zwraca listę słowników z key, summary, issue_type, status, status_since (od kiedy ten status).
+    """
+    allowed_types = {"epic", "initiative", "story"}
+    target_status = "Waiting for release"
+    result = []
+    for issue in issues:
+        fields = issue.get("fields", {})
+        issue_type = (fields.get("issuetype") or {}).get("name") or ""
+        if issue_type.strip().lower() not in allowed_types:
+            continue
+        status = (fields.get("status") or {}).get("name") or ""
+        if status.strip().lower() != target_status.lower():
+            continue
+        key = issue.get("key", "")
+        summary = fields.get("summary", "") or ""
+        status_since = _get_status_since_from_changelog(issue, target_status)
+        result.append({
+            "key": key,
+            "summary": summary,
+            "issue_type": issue_type,
+            "status": status,
+            "status_since": status_since,
+        })
+    return result
+
+
+def get_in_progress_issues_without_assignee(issues):
+    """Znajduje issues ze statusem In Progress bez assignee."""
+    result = []
+    
+    for issue in issues:
+        fields = issue.get("fields", {})
+        status = fields.get("status", {}).get("name", "")
+        
+        # Sprawdź czy status to "In Progress" (case insensitive)
+        if status.lower() not in ["in progress", "inprogress"]:
+            continue
+        
+        assignee = fields.get("assignee")
+        if assignee:
+            continue  # Ma assignee, pomiń
+        
+        key = issue.get("key", "")
+        summary = fields.get("summary", "")
+        created_raw = fields.get("created", "")
+        created_date = created_raw.split("T")[0] if created_raw else ""
+        
+        creator = fields.get("creator", {})
+        creator_name = creator.get("displayName", creator.get("emailAddress", "Unknown"))
+        
+        result.append({
+            "key": key,
+            "summary": summary,
+            "created_date": created_date,
+            "creator_name": creator_name,
+            "status": status
+        })
+    
+    return result
+
+
+def get_quality_analysis(issues):
+    """Wykonuje analizę jakości danych i zwraca wyniki."""
+    global _quality_analysis_cache
+    
+    if _quality_analysis_cache is not None:
+        return _quality_analysis_cache
+    
+    total_issues = len(issues)
+    
+    # 1. Issues z start date w przeszłości ale status OPEN
+    past_start_open = get_issues_with_past_start_date_open(issues)
+    
+    # 2. Issues In Progress bez assignee
+    in_progress_no_assignee = get_in_progress_issues_without_assignee(issues)
+    
+    # 3. Epiki, Inicjatywy, Stories ze statusem Waiting for release
+    waiting_for_release = get_issues_waiting_for_release(issues)
+    
+    result = {
+        "total_issues": total_issues,
+        "past_start_open": {
+            "count": len(past_start_open),
+            "percentage": (len(past_start_open) / total_issues * 100) if total_issues > 0 else 0
+        },
+        "in_progress_no_assignee": {
+            "count": len(in_progress_no_assignee),
+            "percentage": (len(in_progress_no_assignee) / total_issues * 100) if total_issues > 0 else 0
+        },
+        "waiting_for_release": {
+            "count": len(waiting_for_release),
+            "percentage": (len(waiting_for_release) / total_issues * 100) if total_issues > 0 else 0
+        }
+    }
+    
+    _quality_analysis_cache = result
+    return result
+
+
 @app.route("/")
 def index():
     issues = load_issues()
@@ -285,6 +546,9 @@ def index():
     epics = filter_issues_by_type(issues, "Epic", unlinked_only=True)
     stories = filter_issues_by_type(issues, "Story", unlinked_only=True)
     tasks = filter_issues_by_type(issues, "Task", unlinked_only=True)
+    
+    # Get quality analysis
+    quality_analysis = get_quality_analysis(issues)
 
     return render_template(
         "index.html",
@@ -294,6 +558,7 @@ def index():
         epics=epics,
         stories=stories,
         tasks=tasks,
+        quality_analysis=quality_analysis,
         jira_url=JIRA_URL,
     )
 
@@ -326,6 +591,77 @@ def get_all_by_type_api(issue_type):
         "count": len(all_issues),
         "issues": all_issues
     })
+
+
+@app.route("/api/quality/past-start-open")
+def get_past_start_open_api():
+    """
+    API endpoint returning issues with past start date but OPEN status.
+    """
+    issues = load_issues()
+    result = get_issues_with_past_start_date_open(issues)
+    
+    return jsonify({
+        "analysis_type": "past_start_open",
+        "count": len(result),
+        "issues": result
+    })
+
+
+@app.route("/api/quality/in-progress-no-assignee")
+def get_in_progress_no_assignee_api():
+    """
+    API endpoint returning In Progress issues without assignee.
+    """
+    issues = load_issues()
+    result = get_in_progress_issues_without_assignee(issues)
+    
+    return jsonify({
+        "analysis_type": "in_progress_no_assignee",
+        "count": len(result),
+        "issues": result
+    })
+
+
+@app.route("/api/quality/waiting-for-release")
+def get_waiting_for_release_api():
+    """
+    API endpoint returning Epics, Initiatives, Stories with status Waiting for release.
+    """
+    issues = load_issues()
+    result = get_issues_waiting_for_release(issues)
+    
+    return jsonify({
+        "analysis_type": "waiting_for_release",
+        "count": len(result),
+        "issues": result
+    })
+
+
+@app.route("/quality/<analysis_type>")
+def quality_analysis_page(analysis_type):
+    """
+    Page displaying quality analysis results with sortable table.
+    """
+    issues = load_issues()
+    
+    if analysis_type == "past-start-open":
+        result = get_issues_with_past_start_date_open(issues)
+        title = "Issues z Start Date w przeszłości (Status: OPEN)"
+    elif analysis_type == "in-progress-no-assignee":
+        result = get_in_progress_issues_without_assignee(issues)
+        title = "Issues In Progress bez Assignee"
+    else:
+        abort(404)
+    
+    return render_template(
+        "quality_analysis.html",
+        title=title,
+        analysis_type=analysis_type,
+        issues=result,
+        count=len(result),
+        jira_url=JIRA_URL,
+    )
 
 
 if __name__ == "__main__":
