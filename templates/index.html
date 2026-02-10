@@ -582,6 +582,15 @@ const JIRA_URL = {% if jira_url %}{{ jira_url|tojson }}{% else %}null{% endif %}
                 showAllIssuesByType(issueType);
             });
         });
+        
+        // Klik w ilość obiektów Waiting for release
+        const waitingLink = document.getElementById('waitingForReleaseCount');
+        if (waitingLink) {
+            waitingLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                showWaitingForReleaseIssues();
+            });
+        }
     });
 })();
 
@@ -671,28 +680,103 @@ function renderModalTable(issues, totalCount, issueType) {
     }, 0);
 }
 
-function filterModalTable() {
-    const filterId = document.getElementById('filter-id')?.value.toLowerCase() || '';
-    const filterSummary = document.getElementById('filter-summary')?.value.toLowerCase() || '';
-    const filterCreated = document.getElementById('filter-created')?.value.toLowerCase() || '';
-    const filterCreator = document.getElementById('filter-creator')?.value.toLowerCase() || '';
-    const filterReporter = document.getElementById('filter-reporter')?.value.toLowerCase() || '';
+function showWaitingForReleaseIssues() {
+    const modal = document.getElementById('unlinkedModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalContent = document.getElementById('modalContent');
     
+    modalTitle.textContent = 'Obiekty (Epiki, Inicjatywy, Stories) ze statusem Waiting for release';
+    modalContent.innerHTML = '<div class="loading">Loading...</div>';
+    modal.classList.add('active');
+    modalCurrentSort = { column: null, ascending: true };
+    
+    fetch('/api/quality/waiting-for-release')
+        .then(response => response.json())
+        .then(data => {
+            if (data.issues && data.issues.length > 0) {
+                modalIssuesData = data.issues;
+                renderWaitingForReleaseTable(data.issues);
+            } else {
+                modalContent.innerHTML = '<div class="loading">Brak obiektów ze statusem Waiting for release.</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading waiting-for-release:', error);
+            modalContent.innerHTML = '<div class="loading" style="color: #dc2626;">Błąd ładowania. Spróbuj ponownie.</div>';
+        });
+}
+
+function renderWaitingForReleaseTable(issues) {
+    const modalContent = document.getElementById('modalContent');
+    
+    let html = `
+        <p style="margin-bottom: 1rem; color: #666;">Znaleziono <strong>${issues.length}</strong> obiekt(ów) ze statusem Waiting for release:</p>
+        <div class="filter-row">
+            <input type="text" class="modal-filter" id="filter-id" placeholder="Filter ID..." onkeyup="filterModalTable()">
+            <input type="text" class="modal-filter" id="filter-type" placeholder="Filter Typ..." onkeyup="filterModalTable()">
+            <input type="text" class="modal-filter" id="filter-summary" placeholder="Filter Summary..." onkeyup="filterModalTable()">
+            <input type="text" class="modal-filter" id="filter-status-since" placeholder="Filter Od kiedy..." onkeyup="filterModalTable()">
+        </div>
+        <table class="modal-table" id="modalTable">
+            <thead>
+                <tr>
+                    <th class="sortable" data-column="key" onclick="sortModalTable('key')">ID</th>
+                    <th class="sortable" data-column="issue_type" onclick="sortModalTable('issue_type')">Typ</th>
+                    <th class="sortable" data-column="summary" onclick="sortModalTable('summary')">Summary</th>
+                    <th class="sortable" data-column="status_since" onclick="sortModalTable('status_since')">Od kiedy</th>
+                </tr>
+            </thead>
+            <tbody id="modalTableBody">
+    `;
+    
+    issues.forEach(issue => {
+        const jiraLink = JIRA_URL ? `${JIRA_URL}/browse/${issue.key}` : '#';
+        const statusSince = issue.status_since != null && issue.status_since !== '' ? issue.status_since : '—';
+        html += `
+            <tr>
+                <td data-value="${escapeHtml(issue.key)}">
+                    <a href="${jiraLink}" target="_blank" class="issue-id" ${!JIRA_URL ? 'onclick="return false;"' : ''}>
+                        ${escapeHtml(issue.key)}
+                    </a>
+                </td>
+                <td data-value="${escapeHtml((issue.issue_type || '').toLowerCase())}">${escapeHtml(issue.issue_type || '')}</td>
+                <td data-value="${escapeHtml((issue.summary || '').toLowerCase())}">${escapeHtml(issue.summary || '')}</td>
+                <td data-value="${escapeHtml(String(statusSince).toLowerCase())}">${escapeHtml(statusSince)}</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+            </tbody>
+        </table>
+        <p id="modalFilterCount" style="margin-top: 0.5rem; color: #666; font-size: 0.9rem;"></p>
+    `;
+    
+    modalContent.innerHTML = html;
+    setTimeout(() => updateModalFilterCount(), 0);
+}
+
+function filterModalTable() {
     const tbody = document.getElementById('modalTableBody');
     if (!tbody) return;
     
+    const filterInputs = document.querySelectorAll('.modal-content .modal-filter');
     const rows = tbody.querySelectorAll('tr');
+    const colCount = rows.length ? rows[0].querySelectorAll('td').length : 0;
     let visibleCount = 0;
     
     rows.forEach(row => {
         const cells = row.querySelectorAll('td');
-        const idMatch = !filterId || (cells[0]?.getAttribute('data-value') || '').toLowerCase().includes(filterId);
-        const summaryMatch = !filterSummary || (cells[1]?.getAttribute('data-value') || '').includes(filterSummary);
-        const createdMatch = !filterCreated || (cells[2]?.getAttribute('data-value') || '').toLowerCase().includes(filterCreated);
-        const creatorMatch = !filterCreator || (cells[3]?.getAttribute('data-value') || '').includes(filterCreator);
-        const reporterMatch = !filterReporter || (cells[4]?.getAttribute('data-value') || '').includes(filterReporter);
-        
-        if (idMatch && summaryMatch && createdMatch && creatorMatch && reporterMatch) {
+        let allMatch = true;
+        for (let i = 0; i < colCount && i < filterInputs.length; i++) {
+            const filterVal = (filterInputs[i]?.value || '').toLowerCase();
+            const cellVal = (cells[i]?.getAttribute('data-value') || cells[i]?.textContent || '').toLowerCase();
+            if (filterVal && !cellVal.includes(filterVal)) {
+                allMatch = false;
+                break;
+            }
+        }
+        if (allMatch) {
             row.style.display = '';
             visibleCount++;
         } else {
@@ -705,93 +789,61 @@ function filterModalTable() {
 
 function sortModalTable(column) {
     const tbody = document.getElementById('modalTableBody');
-    if (!tbody) return;
+    const table = document.getElementById('modalTable');
+    if (!tbody || !table) return;
     
-    // Usuń wszystkie klasy sortowania
+    const header = table.querySelector(`th[data-column="${column}"]`);
+    const headerIndex = header ? Array.from(table.querySelectorAll('thead th')).indexOf(header) : 0;
+    
     document.querySelectorAll('#modalTable th.sortable').forEach(th => {
         th.classList.remove('sort-asc', 'sort-desc');
     });
     
-    // Ustaw nowy stan sortowania
     const isAscending = modalCurrentSort.column === column ? !modalCurrentSort.ascending : true;
     modalCurrentSort = { column, ascending: isAscending };
+    if (header) header.classList.add(isAscending ? 'sort-asc' : 'sort-desc');
     
-    // Dodaj klasę do odpowiedniego nagłówka
-    const header = document.querySelector(`#modalTable th[data-column="${column}"]`);
-    if (header) {
-        header.classList.add(isAscending ? 'sort-asc' : 'sort-desc');
-    }
-    
-    // Pobierz wszystkie wiersze
     const rows = Array.from(tbody.querySelectorAll('tr'));
-    
-    // Sortuj wiersze
     rows.sort((a, b) => {
         const cellsA = a.querySelectorAll('td');
         const cellsB = b.querySelectorAll('td');
+        const valueA = cellsA[headerIndex]?.getAttribute('data-value') || cellsA[headerIndex]?.textContent.trim() || '';
+        const valueB = cellsB[headerIndex]?.getAttribute('data-value') || cellsB[headerIndex]?.textContent.trim() || '';
         
-        let index = 0;
-        if (column === 'key') index = 0;
-        else if (column === 'summary') index = 1;
-        else if (column === 'created_date') index = 2;
-        else if (column === 'creator_name') index = 3;
-        else if (column === 'reporter_name') index = 4;
-        
-        const valueA = cellsA[index]?.getAttribute('data-value') || cellsA[index]?.textContent.trim() || '';
-        const valueB = cellsB[index]?.getAttribute('data-value') || cellsB[index]?.textContent.trim() || '';
-        
-        // Dla kolumny ID, spróbuj wyciągnąć numer
         if (column === 'key') {
             const matchA = valueA.match(/-(\d+)$/);
             const matchB = valueB.match(/-(\d+)$/);
             if (matchA && matchB) {
                 const numA = parseInt(matchA[1], 10);
                 const numB = parseInt(matchB[1], 10);
-                if (numA !== numB) {
-                    return isAscending ? numA - numB : numB - numA;
-                }
+                if (numA !== numB) return isAscending ? numA - numB : numB - numA;
             }
         }
         
-        // Sortowanie tekstowe (case-insensitive)
         const compareA = valueA.toLowerCase();
         const compareB = valueB.toLowerCase();
-        
         if (compareA < compareB) return isAscending ? -1 : 1;
         if (compareA > compareB) return isAscending ? 1 : -1;
         return 0;
     });
     
-    // Usuń wszystkie wiersze z tbody
     rows.forEach(row => tbody.removeChild(row));
-    
-    // Dodaj posortowane wiersze z powrotem
     rows.forEach(row => tbody.appendChild(row));
     
-    // Zastosuj filtry ponownie (zachowaj widoczność wierszy)
-    const filterId = document.getElementById('filter-id')?.value.toLowerCase() || '';
-    const filterSummary = document.getElementById('filter-summary')?.value.toLowerCase() || '';
-    const filterCreated = document.getElementById('filter-created')?.value.toLowerCase() || '';
-    const filterCreator = document.getElementById('filter-creator')?.value.toLowerCase() || '';
-    const filterReporter = document.getElementById('filter-reporter')?.value.toLowerCase() || '';
-    
+    const filterInputs = document.querySelectorAll('.modal-content .modal-filter');
+    const colCount = rows[0] ? rows[0].querySelectorAll('td').length : 0;
     let visibleCount = 0;
     rows.forEach(row => {
         const cells = row.querySelectorAll('td');
-        const idMatch = !filterId || (cells[0]?.getAttribute('data-value') || '').toLowerCase().includes(filterId);
-        const summaryMatch = !filterSummary || (cells[1]?.getAttribute('data-value') || '').includes(filterSummary);
-        const createdMatch = !filterCreated || (cells[2]?.getAttribute('data-value') || '').toLowerCase().includes(filterCreated);
-        const creatorMatch = !filterCreator || (cells[3]?.getAttribute('data-value') || '').includes(filterCreator);
-        const reporterMatch = !filterReporter || (cells[4]?.getAttribute('data-value') || '').includes(filterReporter);
-        
-        if (idMatch && summaryMatch && createdMatch && creatorMatch && reporterMatch) {
-            row.style.display = '';
-            visibleCount++;
-        } else {
-            row.style.display = 'none';
+        let allMatch = true;
+        for (let i = 0; i < colCount && i < filterInputs.length; i++) {
+            const filterVal = (filterInputs[i]?.value || '').toLowerCase();
+            const cellVal = (cells[i]?.getAttribute('data-value') || cells[i]?.textContent || '').toLowerCase();
+            if (filterVal && !cellVal.includes(filterVal)) { allMatch = false; break; }
         }
+        row.style.display = allMatch ? '' : 'none';
+        if (allMatch) visibleCount++;
     });
-    
     updateModalFilterCount(visibleCount);
 }
 
