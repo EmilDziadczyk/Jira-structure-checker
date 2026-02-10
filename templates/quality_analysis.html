@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8">
+    <title>{{ title }}</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            margin: 2rem;
+            background-color: #f5f5f5;
+        }
+        h1, h2, h3 {
+            margin-bottom: 0.5rem;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 1rem;
+            color: #0065ff;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            vertical-align: top;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            border-bottom: 2px solid #ddd;
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            padding-right: 1.5rem;
+            background: white;
+        }
+        th:hover {
+            background-color: #f0f0f0;
+        }
+        th.sortable::after {
+            content: " ↕";
+            position: absolute;
+            right: 0.3rem;
+            color: #999;
+            font-size: 0.8em;
+        }
+        th.sort-asc::after {
+            content: " ▲";
+            color: #333;
+        }
+        th.sort-desc::after {
+            content: " ▼";
+            color: #333;
+        }
+        tbody tr:nth-child(odd) {
+            background-color: #fafafa;
+        }
+        tbody tr:hover {
+            background-color: #f5f5f5;
+        }
+        .issue-id {
+            font-weight: 600;
+            color: #0065ff;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .issue-id:hover {
+            color: #0052cc;
+        }
+        .count-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            background: #e0e7ff;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+<div class="card">
+    <a href="/" class="back-link">← Powrót do głównej strony</a>
+    <h1>{{ title }}</h1>
+    <div class="count-badge">Znaleziono: {{ count }} issues</div>
+    
+    <table class="sortable-table" id="issuesTable">
+        <thead>
+            <tr>
+                <th class="sortable" data-sort="key" onclick="sortTable('key')">ID</th>
+                <th class="sortable" data-sort="summary" onclick="sortTable('summary')">Nazwa</th>
+                <th class="sortable" data-sort="creator_name" onclick="sortTable('creator_name')">Creator</th>
+                {% if analysis_type == 'past-start-open' %}
+                <th class="sortable" data-sort="start_date" onclick="sortTable('start_date')">Start Date</th>
+                <th class="sortable" data-sort="status" onclick="sortTable('status')">Status</th>
+                {% else %}
+                <th class="sortable" data-sort="created_date" onclick="sortTable('created_date')">Created Date</th>
+                <th class="sortable" data-sort="status" onclick="sortTable('status')">Status</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody id="issuesTableBody">
+            {% for issue in issues %}
+            <tr>
+                <td data-sort-value="{{ issue.key }}">
+                    {% if jira_url %}
+                    <a href="{{ jira_url }}/browse/{{ issue.key }}" target="_blank" class="issue-id">
+                        {{ issue.key }}
+                    </a>
+                    {% else %}
+                    <span class="issue-id">{{ issue.key }}</span>
+                    {% endif %}
+                </td>
+                <td data-sort-value="{{ issue.summary|lower }}">{{ issue.summary }}</td>
+                <td data-sort-value="{{ issue.creator_name|lower }}">{{ issue.creator_name }}</td>
+                {% if analysis_type == 'past-start-open' %}
+                <td data-sort-value="{{ issue.start_date }}">{{ issue.start_date }}</td>
+                <td data-sort-value="{{ issue.status|lower }}">{{ issue.status }}</td>
+                {% else %}
+                <td data-sort-value="{{ issue.created_date }}">{{ issue.created_date }}</td>
+                <td data-sort-value="{{ issue.status|lower }}">{{ issue.status }}</td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+const JIRA_URL = {% if jira_url %}{{ jira_url|tojson }}{% else %}null{% endif %};
+let currentSort = { column: null, ascending: true };
+
+function sortTable(column) {
+    const tbody = document.getElementById('issuesTableBody');
+    if (!tbody) return;
+    
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    // Usuń wszystkie klasy sortowania
+    document.querySelectorAll('#issuesTable th.sortable').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+    });
+    
+    // Ustaw nowy stan sortowania
+    const isAscending = currentSort.column === column ? !currentSort.ascending : true;
+    currentSort = { column, ascending: isAscending };
+    
+    // Dodaj klasę do odpowiedniego nagłówka
+    const header = document.querySelector(`#issuesTable th[data-sort="${column}"]`);
+    if (header) {
+        header.classList.add(isAscending ? 'sort-asc' : 'sort-desc');
+    }
+    
+    // Określ indeks kolumny
+    let columnIndex = 0;
+    if (column === 'key') columnIndex = 0;
+    else if (column === 'summary') columnIndex = 1;
+    else if (column === 'creator_name') columnIndex = 2;
+    else if (column === 'start_date' || column === 'created_date') columnIndex = 3;
+    else if (column === 'status') columnIndex = 4;
+    
+    // Sortuj wiersze
+    rows.sort((a, b) => {
+        const cellsA = a.querySelectorAll('td');
+        const cellsB = b.querySelectorAll('td');
+        
+        const valueA = cellsA[columnIndex]?.getAttribute('data-sort-value') || cellsA[columnIndex]?.textContent.trim() || '';
+        const valueB = cellsB[columnIndex]?.getAttribute('data-sort-value') || cellsB[columnIndex]?.textContent.trim() || '';
+        
+        // Dla kolumny ID, spróbuj wyciągnąć numer
+        if (column === 'key') {
+            const matchA = valueA.match(/-(\d+)$/);
+            const matchB = valueB.match(/-(\d+)$/);
+            if (matchA && matchB) {
+                const numA = parseInt(matchA[1], 10);
+                const numB = parseInt(matchB[1], 10);
+                if (numA !== numB) {
+                    return isAscending ? numA - numB : numB - numA;
+                }
+            }
+        }
+        
+        // Dla dat, parsuj jako daty
+        if (column === 'start_date' || column === 'created_date') {
+            const dateA = new Date(valueA);
+            const dateB = new Date(valueB);
+            if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) {
+                return isAscending ? dateA - dateB : dateB - dateA;
+            }
+        }
+        
+        // Sortowanie tekstowe (case-insensitive)
+        const compareA = valueA.toLowerCase();
+        const compareB = valueB.toLowerCase();
+        
+        if (compareA < compareB) return isAscending ? -1 : 1;
+        if (compareA > compareB) return isAscending ? 1 : -1;
+        return 0;
+    });
+    
+    // Usuń wszystkie wiersze z tbody
+    rows.forEach(row => tbody.removeChild(row));
+    
+    // Dodaj posortowane wiersze z powrotem
+    rows.forEach(row => tbody.appendChild(row));
+}
+</script>
+</body>
+</html>
+

@@ -9,6 +9,7 @@ Application for analyzing and visualizing Jira issues. Allows browsing issues, i
 - Identification of unlinked Epics, Stories, and Tasks
 - Filtering and sorting issues
 - In-memory cache for fast data access
+- Data quality analysis for JIRA projects
 
 ## Requirements
 
@@ -64,9 +65,31 @@ The application will be available at: http://127.0.0.1:5000
 ./run_web_app.sh --host 0.0.0.0 --port 8080
 ```
 
+### Data Quality Analysis
+
+Run the data quality analysis agent for project BP ONE:
+
+```bash
+python3 analyze_data_quality.py
+```
+
+Or using the virtual environment:
+
+```bash
+source venv/bin/activate
+python3 analyze_data_quality.py
+```
+
+The analysis includes:
+- Count of issues without parent
+- Count of issues without start date and end date
+- Count of issues where end date is in the past
+- Additional analyses (status distribution, issues without assignee, duplicates, etc.)
+
 ## Project Structure
 
 - `fetch_jira_issues.py` - Script for fetching issues from Jira
+- `analyze_data_quality.py` - Data quality analysis agent for JIRA projects
 - `app.py` - Flask web application
 - `run_python_venv.sh` - Script to run fetch_jira_issues.py
 - `run_web_app.sh` - Script to run the web application
